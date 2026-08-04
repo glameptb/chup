@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glame Photobooth - Nhap so</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="customer-body">
+    <main class="customer-shell join-shell">
+      <header class="customer-hero">
+        <div>
+          <p class="eyebrow">Glame Photobooth</p>
+          <h1>Nhập số của bạn</h1>
+          <p class="customer-copy">Nhập số chờ trên bill hoặc mã phiên nhân viên đưa để mở đúng phiên ảnh.</p>
+        </div>
+      </header>
+
+      <section class="panel-lite join-card">
+        <label class="join-label">
+          Số chờ hoặc mã phiên
+          <input id="joinCodeInput" autocomplete="off" inputmode="text" placeholder="Ví dụ: A001 hoặc GL-0001" />
+        </label>
+        <button class="primary-btn wide" id="joinSessionBtn" type="button">Vào phiên của tôi</button>
+        <p class="customer-note" id="joinMessage">Nếu chưa tới lượt, trang phiên sẽ tự hiện màn hình chờ.</p>
+      </section>
+    </main>
+
+    <script src="join.js"></script>
+  </body>
+</html>

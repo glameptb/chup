@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glame Photobooth - Hướng dẫn khách hàng</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="guide.css" />
+  </head>
+  <body>
+    <main class="video-shell">
+      <section class="stage" aria-label="Video hướng dẫn Glame Photobooth">
+        <div class="brand-row">
+          <div class="brand-mark">G</div>
+          <div>
+            <strong>Glame Photobooth</strong>
+            <span>Hướng dẫn sử dụng dịch vụ</span>
+          </div>
+        </div>
+
+        <div class="scene-layer" id="sceneLayer"></div>
+
+        <div class="caption-card">
+          <p id="sceneKicker">Bước 1</p>
+          <h1 id="sceneTitle">Quét QR check-in</h1>
+          <p id="sceneText">Quét QR tại quầy để bắt đầu lấy số chờ.</p>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </section>
+
+      <aside class="control-panel">
+        <div>
+          <p class="eyebrow">Customer guide</p>
+          <h2>Video hướng dẫn khách hàng</h2>
+          <p class="muted">Bản chạy tự động trong trình duyệt, dùng để chiếu tại quầy hoặc quay lại thành MP4.</p>
+        </div>
+
+        <div class="controls">
+          <button class="primary-btn" id="playPauseBtn" type="button">Tạm dừng</button>
+          <button class="ghost-btn" id="prevBtn" type="button">Trước</button>
+          <button class="ghost-btn" id="nextBtn" type="button">Tiếp</button>
+          <button class="ghost-btn" id="fullscreenBtn" type="button">Fullscreen</button>
+        </div>
+
+        <div class="scene-list" id="sceneList"></div>
+
+        <div class="script-box">
+          <strong>Lời thoại đề xuất</strong>
+          <p id="voiceoverText"></p>
+        </div>
+      </aside>
+    </main>
+
+    <script src="guide.js"></script>
+  </body>
+</html>

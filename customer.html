@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glame Photobooth - Customer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=20260701-gallery" />
+    <link rel="stylesheet" href="customer-gallery.css?v=20260701-editor2" />
+    <link rel="stylesheet" href="customer-composer.css?v=20260703-print32" />
+  </head>
+  <body class="customer-body">
+    <main class="customer-shell">
+      <header class="customer-hero">
+        <div class="customer-brand-row">
+          <div class="customer-brand-mark" aria-hidden="true">G</div>
+          <div>
+          <p class="eyebrow">Glame Photobooth</p>
+          <h1 id="customerPageTitle">Ảnh vừa chụp</h1>
+          <p class="customer-copy" id="customerPageCopy">Bấm vào ảnh để xem lớn. Nhấn giữ ảnh để tải về máy.</p>
+          </div>
+        </div>
+        <div class="session-card customer-session">
+          <p>Mã phiên</p>
+          <h2 id="customerSessionCode">GL-0001</h2>
+          <span id="customerSelectedCount">0/4 ảnh</span>
+          <small id="customerSessionStatus">Đang tải phiên</small>
+        </div>
+      </header>
+
+      <section class="panel-lite customer-gate" id="customerGate">
+        <p class="eyebrow" id="customerGateStep">Đang chờ lượt</p>
+        <h2 id="customerGateTitle">Vui lòng chờ nhân viên gọi số</h2>
+        <p class="customer-note" id="customerGateText">Trang này sẽ tự cập nhật khi đến lượt và khi ảnh chụp xong.</p>
+        <div class="ticket-number compact-ticket" id="customerGateTicket">A---</div>
+        <a class="ghost-btn wide" href="javascript:location.reload()">Cập nhật</a>
+      </section>
+
+      <section class="customer-raw-stage" id="customerRawStage">
+        <div class="panel-lite">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">Gallery của bạn</p>
+              <h2>Tất cả ảnh</h2>
+            </div>
+          </div>
+          <div class="photo-grid customer-photo-grid raw-photo-grid" id="customerRawPhotoGrid"></div>
+          <div class="customer-photo-actions sticky-actions">
+            <button class="ghost-btn" id="customerDownloadAllBtn" type="button">Lưu tất cả vào Ảnh</button>
+            <button class="primary-btn" id="goComposerBtn" type="button">Chọn frame &amp; ghép ảnh →</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="customer-frame-stage" id="customerFrameStage">
+        <div class="panel-lite">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">02 / Frame</p>
+              <h2>Chọn frame</h2>
+            </div>
+            <button class="ghost-btn" id="backRawFromFrameBtn" type="button">Quay lại</button>
+          </div>
+          <div class="frame-tools customer-frame-tools">
+            <div class="preset-frame-grid" id="customerPresetFrames">
+              <button class="preset-frame is-selected" data-frame="frame1" type="button">
+                <img src="assets/frame1-2.png" alt="ChanBaek rainbow frame" />
+                <span>ChanBaek Rainbow</span>
+                <strong>4 ảnh</strong>
+              </button>
+              <button class="preset-frame" data-frame="frame2" type="button">
+                <img src="assets/frame2-2.png" alt="ChanBaek red frame" />
+                <span>ChanBaek Red</span>
+                <strong>4 ảnh</strong>
+              </button>
+            </div>
+            <p class="customer-note" id="customerFrameNote">Đang dùng frame: ChanBaek Rainbow</p>
+            <button class="primary-btn wide" id="goComposerFromFrameBtn" type="button">Tiếp tục ghép ảnh</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="customer-workspace" id="customerComposerStage">
+        <aside class="customer-preview">
+          <div class="canvas-wrap">
+            <canvas id="customerCanvas" width="1200" height="1800"></canvas>
+          </div>
+          <div class="mobile-edit-bar">
+            <label>
+              Zoom
+              <input id="mobileZoomInput" type="range" min="1" max="2.5" step="0.05" value="1" />
+            </label>
+            <button class="ghost-btn" data-adjust="reset" type="button">Reset</button>
+            <button class="danger-btn" id="removeActivePhotoBtn" type="button">Xóa</button>
+          </div>
+          <div class="customer-filter-strip" aria-label="Bộ lọc ảnh">
+            <button class="filter-chip" data-filter="clean" type="button">Không filter</button>
+            <button class="filter-chip" data-filter="learned" type="button">AI learned</button>
+            <button class="filter-chip" data-filter="bright" type="button">Sáng nhẹ</button>
+            <button class="filter-chip" data-filter="rosy" type="button">Hồng nhẹ</button>
+            <button class="filter-chip" data-filter="magimir" type="button">Retro</button>
+            <button class="filter-chip" data-filter="bw" type="button">B&amp;W</button>
+          </div>
+          <div class="customer-active-readout">
+            <strong id="activePhotoLabel">Chưa chọn ảnh</strong>
+          </div>
+        </aside>
+
+        <div class="customer-tools">
+          <div class="panel-lite">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">03 / Photos</p>
+                <h2>Tất cả ảnh</h2>
+              </div>
+              <button class="ghost-btn" id="backToFrameBtn" type="button">Đổi frame</button>
+            </div>
+            <div class="composer-strip-actions">
+              <button class="composer-strip-command" id="autoFillFrameBtn" type="button">Tự động</button>
+              <label class="composer-strip-command composer-upload-command" aria-label="Tải ảnh đã chỉnh">
+                <span>+</span>
+                <input id="composerUploadInput" type="file" accept="image/*" multiple />
+              </label>
+            </div>
+            <div class="photo-grid customer-photo-grid" id="customerPhotoGrid"></div>
+            <div class="customer-photo-actions">
+              <label class="file-btn">
+                Import ảnh đã chỉnh
+                <input id="customerEditedInput" type="file" accept="image/*" multiple />
+              </label>
+              <button class="ghost-btn" id="customerDownloadSelectedBtn" type="button">Tải ảnh đã chọn</button>
+            </div>
+          </div>
+
+          <div class="panel-lite">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">04 / Final</p>
+                <h2>Hoàn tất</h2>
+              </div>
+            </div>
+            <div class="frame-tools customer-frame-tools">
+              <p class="customer-note" id="customerFinalProgress">Luot ghep 1/1</p>
+              <strong class="customer-print-code" id="customerPrintCode" hidden></strong>
+              <button class="primary-btn wide" id="customerRenderBtn" type="button">Ghép lại ảnh</button>
+              <button class="primary-btn wide" id="sendPrintBtn" type="button">Xuất final & gửi nhân viên in</button>
+              <button class="primary-btn wide" id="customerDownloadBtn" type="button" hidden>Tải ảnh đã ghép</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="customer-final-result" id="customerFinalResult" hidden>
+        <p class="eyebrow">HOÀN TẤT</p>
+        <h1 id="customerResultTitle">Đã ghép đủ ảnh</h1>
+        <p id="customerResultCopy">Bạn có thể tải ảnh về hoặc tiếp tục yêu cầu nhân viên in.</p>
+        <div class="customer-final-gallery" id="customerFinalGallery"></div>
+        <strong class="customer-result-code" id="customerResultPrintCode" hidden></strong>
+        <button class="primary-btn wide" id="customerDownloadFinalBtn" type="button">Lưu ảnh đã ghép vào album</button>
+        <div class="customer-print-order">
+          <h2>XÁC NHẬN IN ẢNH</h2>
+          <p id="customerPrintSummary">2 tờ · 300dpi · Glossy</p>
+          <button class="primary-btn wide" id="customerRequestPrintBtn" type="button">XÁC NHẬN ĐẶT IN</button>
+          <small>NHẬN TẠI QUẦY TRONG ~2 PHÚT</small>
+          <button class="customer-back-edit" id="customerBackToEditBtn" type="button">← QUAY LẠI CHỈNH SỬA</button>
+        </div>
+      </section>
+
+      <div class="customer-print-confirm" id="customerPrintConfirm" hidden>
+        <div class="customer-print-confirm-card" role="dialog" aria-modal="true" aria-labelledby="customerPrintConfirmTitle">
+          <h2 id="customerPrintConfirmTitle">XÁC NHẬN IN ẢNH?</h2>
+          <p>Lệnh in sẽ được gửi đến nhân viên. Bạn có chắc chắn muốn in không?</p>
+          <div class="customer-print-confirm-actions">
+            <button class="ghost-btn" id="customerCancelPrintBtn" type="button">HỦY</button>
+            <button class="primary-btn" id="customerConfirmPrintBtn" type="button">IN NGAY</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="staff-only" aria-hidden="true">
+        <input id="customerPhotoInput" type="file" accept="image/*" multiple />
+        <input id="mobileZoomInputFallback" type="range" min="1" max="2.5" step="0.05" value="1" />
+        <input id="customerFrameTitle" type="text" value="BESTIE U40" />
+        <input id="customerFrameSubtitle" type="text" value="GLAME PHOTOBOOTH" />
+        <div id="customerFrameSwatches">
+          <button class="swatch is-selected" data-theme="champagne" title="Champagne" type="button"></button>
+          <button class="swatch rose" data-theme="Rose" type="button"></button>
+          <button class="swatch mint" data-theme="Mint" type="button"></button>
+          <button class="swatch ink" data-theme="Ink" type="button"></button>
+        </div>
+        <label class="file-btn wide">
+          Import frame PNG
+          <input id="customerFrameInput" type="file" accept="image/png,image/webp,image/*" />
+        </label>
+        <input id="photoZoomInput" type="range" min="1" max="2.5" step="0.05" value="1" />
+        <strong id="activeFilterLabel">Chưa chọn ảnh</strong>
+        <button class="ghost-btn" data-adjust="up" type="button">Lên</button>
+        <button class="ghost-btn" data-adjust="down" type="button">Xuống</button>
+        <div class="filter-panel" hidden>
+          <button class="filter-chip is-selected" data-filter="clean" type="button">Tự nhiên</button>
+          <button class="filter-chip" data-filter="bright" type="button">Sáng da</button>
+          <button class="filter-chip" data-filter="rosy" type="button">Hồng nhẹ</button>
+          <button class="filter-chip" data-filter="film" type="button">Film</button>
+          <button class="filter-chip" data-filter="bw" type="button">B&W</button>
+          <button class="filter-chip" data-filter="sample" id="sampleFilterChip" type="button" hidden disabled>Ảnh mẫu</button>
+          <input id="filterSampleInput" type="file" accept="image/*" />
+          <button class="ghost-btn" id="applyFilterAllBtn" type="button">Áp filter</button>
+        </div>
+        <button class="ghost-btn" id="requestAutoEditBtn" type="button">Yêu cầu chỉnh sửa tự động</button>
+        <button class="ghost-btn" id="rawZipBtn" type="button">Tải ZIP ảnh gốc</button>
+      </div>
+    </main>
+
+    <div class="photo-viewer" id="photoViewer" hidden>
+      <div class="photo-viewer-card">
+        <button class="photo-viewer-close" id="viewerCloseIconBtn" type="button" aria-label="Đóng">×</button>
+        <img id="photoViewerImage" alt="Ảnh vừa chụp" />
+        <div class="photo-viewer-actions">
+          <button class="ghost-btn" id="viewerFavoriteBtn" type="button">♡ Ghim ảnh</button>
+          <button class="primary-btn" id="viewerDownloadBtn" type="button">Lưu vào Ảnh</button>
+          <button class="ghost-btn" id="viewerCloseBtn" type="button">Đóng</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="customerToast" role="status" aria-live="polite"></div>
+    <script src="customer.js?v=20260703-session36"></script>
+  </body>
+</html>

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glame Photobooth - Filter Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="admin-filter-shell">
+      <header class="customer-hero">
+        <div>
+          <p class="eyebrow">Admin filter lab</p>
+          <h1>Test filter trước khi đưa vào luồng vận hành</h1>
+          <p class="customer-copy">Màn hình này chỉ dành cho admin/nhân viên. Khách không thấy phần upload ảnh mẫu và copy filter.</p>
+        </div>
+        <a class="ghost-btn link-btn" href="customer.html?session=GL-0001&maxPhotos=4">Về màn khách</a>
+      </header>
+
+      <section class="admin-filter-layout">
+        <div class="customer-tools">
+          <div class="panel-lite">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">01 / Test photos</p>
+                <h2>Ảnh cần apply filter</h2>
+              </div>
+              <label class="file-btn">
+                Upload ảnh test
+                <input id="adminPhotoInput" type="file" accept="image/*" multiple />
+              </label>
+            </div>
+            <div class="photo-grid customer-photo-grid" id="adminPhotoGrid"></div>
+          </div>
+
+          <div class="panel-lite">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">02 / Reference</p>
+                <h2>Copy filter từ ảnh mẫu</h2>
+              </div>
+              <label class="file-btn">
+                Upload ảnh mẫu
+                <input id="adminSampleInput" type="file" accept="image/*" />
+              </label>
+            </div>
+            <div class="sample-preview" id="samplePreview">
+              <span>Chưa có ảnh mẫu</span>
+            </div>
+          </div>
+
+          <div class="panel-lite">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">03 / Filters</p>
+                <h2>Chọn filter</h2>
+              </div>
+            </div>
+            <div class="filter-chip-grid admin-filter-grid" id="adminFilterGrid">
+              <button class="filter-chip is-selected" data-filter="clean" type="button">Tự nhiên</button>
+              <button class="filter-chip" data-filter="bright" type="button">Sáng da</button>
+              <button class="filter-chip" data-filter="rosy" type="button">Hồng nhẹ</button>
+              <button class="filter-chip" data-filter="blackMist" type="button">Black mist</button>
+              <button class="filter-chip" data-filter="dream" type="button">Dream soft glow</button>
+              <button class="filter-chip" data-filter="learned" id="adminLearnedFilterBtn" type="button" disabled>AI learned</button>
+              <button class="filter-chip" data-filter="magimir" type="button">Magimir mềm retro</button>
+              <button class="filter-chip" data-filter="film" type="button">Film</button>
+              <button class="filter-chip" data-filter="bw" type="button">B&W</button>
+              <button class="filter-chip" data-filter="sample" id="adminSampleFilterBtn" type="button" disabled>Ảnh mẫu</button>
+            </div>
+            <label class="filter-intensity">
+              Cường độ ảnh mẫu
+              <span id="sampleIntensityValue">100%</span>
+              <input id="sampleIntensityInput" type="range" min="0" max="100" step="1" value="100" />
+            </label>
+            <label class="filter-intensity">
+              Contrast effect
+              <span id="effectContrastValue">115%</span>
+              <input id="effectContrastInput" type="range" min="90" max="135" step="1" value="115" />
+            </label>
+            <div class="filter-sample-tools">
+              <button class="primary-btn" id="applyCurrentBtn" type="button">Apply ảnh đang chọn</button>
+              <button class="ghost-btn" id="applyAllBtn" type="button">Apply tất cả ảnh</button>
+              <button class="ghost-btn" id="downloadCurrentBtn" type="button">Tải ảnh đang chọn</button>
+              <button class="ghost-btn" id="downloadAllBtn" type="button">Tải tất cả ảnh</button>
+            </div>
+          </div>
+
+          <div class="panel-lite">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">04 / Background automation</p>
+                <h2>Quản lý auto filter</h2>
+              </div>
+            </div>
+            <div class="background-manager">
+              <div class="filter-sample-tools">
+                <button class="primary-btn" id="autoDetectCurrentBtn" type="button">Nhận diện ảnh đang chọn</button>
+                <button class="ghost-btn" id="autoApplyByBackgroundBtn" type="button">Auto apply tất cả</button>
+              </div>
+              <div class="background-readout" id="backgroundReadout">Chưa nhận diện background.</div>
+              <label class="filter-intensity">
+                Background
+                <select id="backgroundRuleSelect"></select>
+              </label>
+              <label class="filter-intensity">
+                Filter mặc định cho background này
+                <select id="backgroundFilterSelect"></select>
+              </label>
+              <div class="filter-sample-tools">
+                <button class="ghost-btn" id="saveBackgroundRuleBtn" type="button">Lưu cấu hình chủ</button>
+                <button class="ghost-btn" id="resetBackgroundRulesBtn" type="button">Reset mặc định</button>
+              </div>
+              <p class="small-note">Chủ set rule một lần, nhân viên chỉ cần bấm auto apply khi nhận ảnh.</p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="customer-preview">
+          <div class="canvas-wrap admin-canvas-wrap">
+            <canvas id="adminFilterCanvas" width="1200" height="1600"></canvas>
+          </div>
+          <div class="filter-readout" id="filterReadout">Filter: Tự nhiên</div>
+        </aside>
+      </section>
+    </main>
+
+    <div class="toast" id="adminFilterToast" role="status" aria-live="polite"></div>
+    <script src="filter-admin.js"></script>
+  </body>
+</html>

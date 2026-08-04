@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glame Staff Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=20260706-revenue3" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">G</div>
+          <div>
+            <strong>Glame Local</strong>
+            <span>Staff dashboard</span>
+          </div>
+        </div>
+        <nav class="side-nav">
+          <a href="#queue">Hang cho</a>
+          <a href="#shooting">Dang chup</a>
+          <a href="#retouch">Chinh sua tu dong</a>
+          <a href="#print">Cho in</a>
+          <a href="#delivery">ZIP / FotoShare</a>
+          <a href="#packages">Goi chup</a>
+          <a href="#revenue">Doanh thu</a>
+          <a href="#filter-lab">Quản lý filter</a>
+        </nav>
+        <div class="local-card">
+          <span>Local Agent</span>
+          <strong>Demo mode</strong>
+          <small>D:\Photobooth\Incoming</small>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local-only photobooth</p>
+            <h1>Quan ly check-in, hang doi, chup, ghep frame va in anh tai quan.</h1>
+          </div>
+          <div class="actions">
+            <a class="primary-btn" href="capture.html" target="_blank" rel="noopener">Mở Capture Station</a>
+            <a class="ghost-btn" href="checkin.html" target="_blank" rel="noopener">Mo QR check-in</a>
+            <button class="ghost-btn" id="seedBtn" type="button">Tao khach demo</button>
+            <button class="danger-btn" id="resetBtn" type="button">Xoa demo</button>
+          </div>
+        </header>
+
+        <div class="dashboard-tabs" role="tablist" aria-label="Khu vực dashboard">
+          <button class="dashboard-tab is-active" data-dashboard-tab-button="operations" role="tab" aria-selected="true" type="button">Vận hành</button>
+          <button class="dashboard-tab" data-dashboard-tab-button="revenue" role="tab" aria-selected="false" type="button">Doanh thu</button>
+          <button class="dashboard-tab" data-dashboard-tab-button="management" role="tab" aria-selected="false" type="button">Quản lý</button>
+        </div>
+
+        <section class="revenue-view" id="revenue" data-dashboard-view="revenue">
+          <div class="revenue-lock" id="revenueLock">
+            <div class="revenue-lock-card">
+              <p class="eyebrow">Bảo mật</p>
+              <h2>Nhập PIN doanh thu</h2>
+              <p>Chỉ chủ quán hoặc người được cấp PIN mới xem được số liệu.</p>
+              <form id="revenueLoginForm"><input id="revenuePinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="Nhập PIN" autocomplete="current-password" /><button class="primary-btn" type="submit">Mở khóa</button></form>
+              <small id="revenueLoginError"></small>
+            </div>
+          </div>
+          <div class="revenue-content" id="revenueContent" hidden>
+          <div class="section-head revenue-head">
+            <div>
+              <p class="eyebrow">Revenue</p>
+              <h2>Quản lý doanh thu</h2>
+            </div>
+            <div class="revenue-ranges" role="group" aria-label="Khoảng thời gian">
+              <button class="range-btn is-active" data-revenue-range="today" type="button">Hôm nay</button>
+              <button class="range-btn" data-revenue-range="7days" type="button">7 ngày</button>
+              <button class="range-btn" data-revenue-range="month" type="button">Tháng này</button>
+              <button class="range-btn" data-revenue-range="all" type="button">Tất cả</button>
+            </div>
+          </div>
+          <div class="revenue-custom-range">
+            <label>Từ ngày<input id="revenueFromDate" type="date" /></label>
+            <label>Đến ngày<input id="revenueToDate" type="date" /></label>
+            <button class="ghost-btn" id="applyRevenueDatesBtn" type="button">Áp dụng</button>
+          </div>
+          <div class="revenue-stats">
+            <article class="revenue-primary"><span>Tổng doanh thu</span><strong id="revenueTotal">0đ</strong><small id="revenuePeriodLabel">Hôm nay</small></article>
+            <article><span>Phiên đã thanh toán</span><strong id="revenueSessionCount">0</strong></article>
+            <article><span>Trung bình / phiên</span><strong id="revenueAverage">0đ</strong></article>
+            <article><span>Chuyển khoản</span><strong id="revenueBank">0đ</strong></article>
+            <article><span>Tiền mặt</span><strong id="revenueCash">0đ</strong></article>
+          </div>
+          <section class="panel revenue-chart-panel">
+            <div class="section-head compact"><div><p class="eyebrow">Theo ngày</p><h2>Doanh thu tiền mặt và chuyển khoản</h2></div><div class="chart-legend"><span><i class="bank-swatch"></i>Chuyển khoản</span><span><i class="cash-swatch"></i>Tiền mặt</span></div></div>
+            <div class="revenue-chart" id="revenueChart"></div>
+          </section>
+          <section class="panel revenue-detail-panel">
+            <div class="section-head compact">
+              <div><p class="eyebrow">Chi tiết</p><h2>Các giao dịch đã thanh toán</h2></div>
+              <div class="row-actions"><button class="ghost-btn" id="changeRevenuePinBtn" type="button">Đổi PIN</button><button class="ghost-btn" id="exportRevenueBtn" type="button">Xuất CSV</button><button class="primary-btn" id="exportS1aBtn" type="button">Xuất Excel S1a-HKD</button></div>
+            </div>
+            <div class="revenue-table-wrap">
+              <table class="revenue-table">
+                <thead><tr><th>Thời gian</th><th>Mã lượt</th><th>Khách hàng</th><th>Gói</th><th>Thanh toán</th><th class="money-cell">Doanh thu</th></tr></thead>
+                <tbody id="revenueTableBody"></tbody>
+              </table>
+            </div>
+            <div class="empty-state" id="revenueEmpty" hidden>Chưa có giao dịch đã thanh toán trong khoảng này.</div>
+          </section>
+          </div>
+        </section>
+
+        <section class="stats-grid" data-dashboard-view="operations">
+          <article class="stat-card">
+            <span>Dang cho</span>
+            <strong id="waitingCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Dang chup</span>
+            <strong id="shootingCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Cho in</span>
+            <strong id="printCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Hoan tat</span>
+            <strong id="doneCount">0</strong>
+          </article>
+        </section>
+
+        <section class="panel store-checkin-panel" id="storeCheckin" data-dashboard-view="management">
+          <div>
+            <p class="eyebrow">QR chung cửa hàng</p>
+            <h2>Khách tự chọn phòng và gói chụp</h2>
+            <p class="customer-note">In QR này tại quầy. Mọi khách đều dùng chung một mã.</p>
+            <a class="ghost-btn link-btn" id="storeCheckinLink" href="checkin.html" target="_blank">Mở trang check-in</a>
+          </div>
+          <div class="store-checkin-qr">
+            <canvas id="storeCheckinQrCanvas" width="280" height="280" aria-label="QR check-in chung"></canvas>
+            <code id="storeCheckinUrl">Đang lấy địa chỉ mạng...</code>
+          </div>
+        </section>
+
+        <section class="panel" id="queue" data-dashboard-view="operations">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">01 / Queue</p>
+              <h2>Hang cho sau thanh toan</h2>
+            </div>
+            <button class="primary-btn" id="callNextBtn" type="button">Goi so tiep theo</button>
+          </div>
+          <div class="session-list" id="queueList"></div>
+        </section>
+
+        <section class="panel" id="shooting" data-dashboard-view="operations">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">02 / Shooting</p>
+              <h2>Phien dang active</h2>
+            </div>
+            <span class="pill">Chi 1 session nhan anh tu Incoming</span>
+          </div>
+          <div class="active-session" id="activeSession"></div>
+        </section>
+
+        <section class="panel" id="auto-filter" hidden>
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">03 / Auto filter</p>
+              <h2>Quan ly apply filter theo background</h2>
+            </div>
+            <span class="pill">Tu chay truoc khi khach thay anh</span>
+          </div>
+          <div class="session-card-row">
+            <div>
+              <strong>Cau hinh filter dang dung</strong>
+              <span>Chu quan set tai day, nhan vien chi theo doi trang thai.</span>
+              <small>Anh se duoc apply filter truoc khi hien cho khach tai ve/ghep frame.</small>
+            </div>
+            <div class="row-actions">
+              <label class="filter-intensity">
+                Background
+                <select id="autoFilterBackgroundSelect"></select>
+              </label>
+              <label class="filter-intensity">
+                Filter
+                <select id="autoFilterSelect"></select>
+              </label>
+              <label class="filter-intensity">
+                Trang thai
+                <select id="autoFilterEnabledSelect">
+                  <option value="true">Bat auto filter</option>
+                  <option value="false">Tat auto filter</option>
+                </select>
+              </label>
+              <button class="primary-btn" id="saveAutoFilterSettingBtn" type="button">Luu setting</button>
+            </div>
+          </div>
+          <div class="session-list" id="autoFilterList"></div>
+        </section>
+
+        <section class="panel" id="retouch" data-dashboard-view="management">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">04 / Auto edit</p>
+              <h2>Queue chinh sua tu dong</h2>
+            </div>
+          </div>
+          <div class="session-list" id="retouchList"></div>
+        </section>
+
+        <section class="panel" id="print" data-dashboard-view="operations">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">05 / Print</p>
+              <h2>File final cho nhan vien in</h2>
+            </div>
+          </div>
+          <div class="session-list" id="printList"></div>
+        </section>
+
+        <section class="panel" id="delivery" data-dashboard-view="management">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">06 / Delivery</p>
+              <h2>ZIP cuoi cung / FotoShare tuy chon</h2>
+            </div>
+          </div>
+          <div class="session-list" id="deliveryList"></div>
+        </section>
+
+        <section class="panel" id="packages" data-dashboard-view="management">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">07 / Packages</p>
+              <h2>Quan ly gia goi, so tam in va frame</h2>
+            </div>
+            <button class="primary-btn" id="savePackageSettingsBtn" type="button">Luu goi chup</button>
+          </div>
+          <div class="session-list package-settings-list" id="packageSettingsList"></div>
+        </section>
+
+        <section class="panel" id="filter-lab" data-dashboard-view="management">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Filter Lab</p>
+              <h2>Quản lý, thêm mới và kiểm tra filter</h2>
+            </div>
+            <button class="primary-btn" id="toggleFilterLabBtn" type="button">Mở Filter Lab</button>
+            <a class="ghost-btn" href="filter-admin.html" target="_blank" rel="noopener">Mở toàn màn hình</a>
+          </div>
+          <iframe class="filter-admin-frame" id="filterAdminFrame" title="Filter admin lab" hidden></iframe>
+        </section>
+      </main>
+    </div>
+
+    <div class="link-modal" id="customerLinkModal" hidden>
+      <div class="link-modal-card">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Customer link</p>
+            <h2>Link phiên của khách</h2>
+          </div>
+          <button class="ghost-btn" id="closeCustomerLinkModalBtn" type="button">Dong</button>
+        </div>
+        <div class="customer-link-box">
+          <label>
+            Link trực tiếp
+            <input id="customerDirectLinkInput" readonly />
+          </label>
+          <div class="session-qr-wrap">
+            <canvas id="customerSessionQrCanvas" width="280" height="280" aria-label="QR link phien khach"></canvas>
+            <strong id="customerSessionQrCode">A---</strong>
+          </div>
+          <button class="primary-btn" id="copyCustomerDirectLinkBtn" type="button">Copy link</button>
+        </div>
+        <div class="customer-link-box">
+          <label>
+            Link nhập số cố định
+            <input id="customerJoinLinkInput" readonly />
+          </label>
+          <strong id="customerJoinCodeLabel">A---</strong>
+        </div>
+        <p class="customer-note">Cach dung tai quay: khach vao link nhap so co dinh, nhap so cho tren bill/phieu lay so, app se mo dung phien cua khach.</p>
+      </div>
+    </div>
+
+    <div class="link-modal" id="changeRevenuePinModal" hidden>
+      <div class="link-modal-card revenue-pin-modal">
+        <div class="section-head compact"><div><p class="eyebrow">Bảo mật</p><h2>Đổi PIN doanh thu</h2></div><button class="ghost-btn" id="closeRevenuePinModalBtn" type="button">Đóng</button></div>
+        <form id="changeRevenuePinForm"><label>PIN mới<input id="newRevenuePinInput" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password" /></label><label>Nhập lại PIN<input id="confirmRevenuePinInput" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password" /></label><button class="primary-btn" type="submit">Lưu PIN mới</button></form>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js?v=20260706-revenue3"></script>
+  </body>
+</html>

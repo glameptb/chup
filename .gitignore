@@ -1,0 +1,43 @@
+# Runtime data
+data/
+sessions/
+incoming-digicam/
+uploads/
+exports/
+outputs/
+logs/
+
+# Local browser/app profiles
+.capture-app-profile/
+
+# Training/test photo datasets
+dataset/
+
+# Dependency/cache folders
+node_modules/
+tools/**/node_modules/
+vendor_py/
+
+# Logs
+*.log
+server.err.log
+server.out.log
+server.log
+
+# SQLite/database files
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+
+# Generated media and archives
+*.mp4
+*.mov
+*.zip
+*.7z
+*.rar
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini

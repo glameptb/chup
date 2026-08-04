@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bảng xếp hạng PickleRank</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="display-body">
+    <div class="display-actions no-export">
+      <button class="primary-btn" id="exportImageBtn" type="button">Xuất ảnh PNG</button>
+    </div>
+
+    <main class="display-screen">
+      <header class="display-header">
+        <div>
+          <p class="eyebrow">PickleRank Club</p>
+          <h1>Bảng xếp hạng câu lạc bộ</h1>
+        </div>
+        <div class="display-meta">
+          <strong id="displayDate">--</strong>
+          <span id="displayCount">0 trận</span>
+        </div>
+      </header>
+
+      <section class="podium-section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Top 1, 2, 3</p>
+            <h2>Rating cao nhất hiện tại</h2>
+          </div>
+        </div>
+        <div class="podium-grid" id="podiumGrid"></div>
+      </section>
+
+      <section class="monthly-section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Phong độ tháng này</p>
+            <h2>Top 3 tăng điểm trong tháng</h2>
+          </div>
+          <span class="pill" id="monthLabel">Tháng này</span>
+        </div>
+        <div class="gain-list" id="gainList"></div>
+      </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="leaderboard.js"></script>
+  </body>
+</html>

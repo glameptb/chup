@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GLAME Capture Station</title>
+    <link rel="stylesheet" href="capture.css?v=20260701-1" />
+  </head>
+  <body>
+    <main class="capture-shell">
+      <header class="capture-header">
+        <div><strong>GLAME</strong><span>Capture Station</span></div>
+        <div class="camera-state"><i></i><span id="cameraState">Đang chờ phiên</span></div>
+        <div class="timer" id="timer">00:00</div>
+      </header>
+
+      <section class="entry" id="entryPanel">
+        <form id="codeForm">
+          <label for="codeInput">Mã khách hàng</label>
+          <div class="code-row">
+            <input id="codeInput" autocomplete="off" autofocus placeholder="GL-0001 hoặc A001" />
+            <button type="submit">Mở phiên</button>
+          </div>
+          <p id="entryMessage">Nhập mã trên phiếu để bắt đầu gói chụp.</p>
+        </form>
+      </section>
+
+      <section class="studio" id="studioPanel" hidden>
+        <div class="preview-panel">
+          <div class="preview-placeholder" id="previewPlaceholder">
+            <strong>CANON LIVE VIEW</strong>
+            <span>Đang nhận preview từ camera bridge</span>
+          </div>
+          <img id="liveView" alt="Canon Live View" hidden />
+          <div class="countdown" id="countdown" hidden></div>
+          <div class="session-badge"><strong id="sessionCode"></strong><span id="packageName"></span></div>
+        </div>
+
+        <div class="recent-panel">
+          <div class="recent-head"><strong>Ảnh vừa chụp</strong><span id="photoCount">0 ảnh</span></div>
+          <div class="recent-content">
+            <img id="latestPhoto" alt="Ảnh vừa chụp" hidden />
+            <div class="empty-photo" id="emptyPhoto">Ảnh đầu tiên sẽ xuất hiện tại đây</div>
+          </div>
+          <div class="thumbs" id="thumbs"></div>
+        </div>
+
+        <footer class="studio-actions">
+          <span id="captureHint">Nhấn Space để chụp</span>
+          <button class="capture" id="captureBtn" type="button" aria-label="Chụp ảnh">●</button>
+          <button class="finish" id="finishBtn" type="button">Kết thúc phiên</button>
+        </footer>
+      </section>
+
+      <section class="complete" id="completePanel" hidden>
+        <canvas class="qr-placeholder" id="qrPlaceholder" width="220" height="220" aria-label="QR nhận ảnh"></canvas>
+        <h1>Ảnh của bạn đã sẵn sàng</h1>
+        <p>Quét QR bằng điện thoại đang kết nối Wi-Fi tại cửa hàng.</p>
+        <a id="galleryLink" target="_blank" rel="noopener"></a>
+        <button id="newSessionBtn" type="button">Phiên tiếp theo</button>
+      </section>
+    </main>
+    <script src="capture.js?v=20260701-1"></script>
+  </body>
+</html>

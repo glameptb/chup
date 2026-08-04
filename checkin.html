@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glame Photobooth - Check-in</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="checkin-flow.css?v=20260701-1" />
+  </head>
+  <body class="checkin-body">
+    <main class="checkin-shell">
+      <header class="checkin-hero">
+        <p class="eyebrow">Glame Photobooth</p>
+        <h1>Đặt lượt chụp</h1>
+        <p>Chọn phòng, gói chụp và phương thức thanh toán.</p>
+      </header>
+
+      <section class="stepper" aria-label="Các bước check-in">
+        <span class="is-active" data-step-dot="room">Phòng</span>
+        <span data-step-dot="info">Thông tin</span>
+        <span data-step-dot="package">Gói chụp</span>
+        <span data-step-dot="payment">Thanh toán</span>
+        <span data-step-dot="ticket">Phiên</span>
+      </section>
+
+      <section class="panel checkin-panel is-visible" data-checkin-panel="room">
+        <p class="eyebrow">01 / Phòng chụp</p>
+        <h2>Chọn phòng</h2>
+        <div class="room-grid" id="roomGrid"></div>
+        <button class="primary-btn wide" id="continueRoomBtn" type="button">Tiếp tục</button>
+      </section>
+
+      <section class="panel checkin-panel" data-checkin-panel="info">
+        <p class="eyebrow">02 / Thông tin</p>
+        <h2>Thông tin khách hàng</h2>
+        <div class="form-grid">
+          <label>Họ và tên<input id="customerNameInput" type="text" autocomplete="name" placeholder="Nguyễn Minh Anh" /></label>
+          <label>Số điện thoại / Zalo<input id="customerContactInput" type="tel" autocomplete="tel" inputmode="tel" placeholder="0988888888" /></label>
+        </div>
+        <button class="primary-btn wide" id="continueInfoBtn" type="button">Chọn gói chụp</button>
+      </section>
+
+      <section class="panel checkin-panel" data-checkin-panel="package">
+        <p class="eyebrow">03 / Gói chụp</p>
+        <h2>Chọn thời gian chụp</h2>
+        <div class="package-grid" id="checkinPackageGrid"></div>
+        <button class="primary-btn wide" id="continuePackageBtn" type="button">Chọn thanh toán</button>
+      </section>
+
+      <section class="panel checkin-panel" data-checkin-panel="payment">
+        <p class="eyebrow">04 / Thanh toán</p>
+        <h2>Phương thức thanh toán</h2>
+        <div class="payment-methods" id="paymentMethods">
+          <button class="payment-method is-selected" data-payment="BANK_TRANSFER" type="button"><strong>Chuyển khoản</strong><span>Quét QR ngân hàng</span></button>
+          <button class="payment-method" data-payment="CASH" type="button"><strong>Tiền mặt</strong><span>Thanh toán tại quầy</span></button>
+        </div>
+        <div class="payment-detail" id="bankPaymentDetail">
+          <div class="qr-card compact-payment-qr">
+            <div class="qr-code" aria-label="QR thanh toán"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <p>Nội dung chuyển khoản</p>
+            <strong id="transferContent">GLAME</strong>
+            <em id="paymentAmount">0đ</em>
+          </div>
+          <button class="primary-btn wide" id="confirmTransferBtn" type="button">Tôi đã chuyển khoản</button>
+        </div>
+        <div class="payment-detail" id="cashPaymentDetail" hidden>
+          <div class="cash-note"><strong>Thanh toán tại quầy</strong><p>Đưa màn hình này cho nhân viên sau khi thanh toán.</p></div>
+          <button class="primary-btn wide" id="requestCashBtn" type="button">Tạo yêu cầu thanh toán tiền mặt</button>
+        </div>
+      </section>
+
+      <section class="panel checkin-panel ticket-panel" data-checkin-panel="ticket">
+        <p class="eyebrow" id="ticketStepLabel">05 / Phiên của bạn</p>
+        <h2 id="ticketTitle">Đã tạo phiên</h2>
+        <div class="ticket-number" id="ticketNumber">A001</div>
+        <p id="ticketMeta"></p>
+        <div class="wait-readout"><span>Thời gian chờ dự kiến</span><strong id="ticketWaitTime">-- phút</strong></div>
+        <a class="primary-btn link-btn wide" id="sessionLink" href="customer.html">Mở phiên của tôi</a>
+      </section>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="checkin.js?v=20260703-controls4"></script>
+  </body>
+</html>
