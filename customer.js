@@ -573,7 +573,7 @@ async function shareImageFiles(files, fallbackSource) {
 async function downloadPhotoFile(photo) {
   if (!photo) return;
   const safeName = (photo.name || `${customerState.sessionCode}-photo.jpg`).replace(/[^a-zA-Z0-9._-]+/g, "-");
-  const source = photo.filteredSrc || photo.src;
+  const source = photo.src;
   showCustomerToast("Đang chuẩn bị lưu ảnh...");
   try {
     const file = await sourceToFile(source, safeName);
@@ -1374,11 +1374,11 @@ async function downloadAllCustomerPhotos() {
   showCustomerToast("Đang chuẩn bị tất cả ảnh...");
   try {
     const files = await Promise.all(customerState.photos.map((photo, index) => {
-      const source = photo.filteredSrc || photo.src;
+      const source = photo.src;
       const name = (photo.name || `${customerState.sessionCode}-${index + 1}.jpg`).replace(/[^a-zA-Z0-9._-]+/g, "-");
       return sourceToFile(source, name);
     }));
-    await shareImageFiles(files, customerState.photos[0]?.filteredSrc || customerState.photos[0]?.src);
+    await shareImageFiles(files, customerState.photos[0]?.src);
   } catch {
     showCustomerToast("Chưa thể chuẩn bị tất cả ảnh. Hãy lưu từng ảnh.");
   }
