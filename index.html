@@ -24,7 +24,7 @@
           <a href="#shooting">Dang chup</a>
           <a href="#retouch">Chinh sua tu dong</a>
           <a href="#print">Cho in</a>
-          <a href="#delivery">ZIP / FotoShare</a>
+          <a href="#delivery">Hoàn tất</a>
           <a href="#packages">Goi chup</a>
           <a href="#revenue">Doanh thu</a>
           <a href="#filter-lab">Quản lý filter</a>
@@ -50,8 +50,9 @@
           </div>
         </header>
 
-        <div class="dashboard-tabs" role="tablist" aria-label="Khu vực dashboard">
+                <div class="dashboard-tabs" role="tablist" aria-label="Khu vực dashboard">
           <button class="dashboard-tab is-active" data-dashboard-tab-button="operations" role="tab" aria-selected="true" type="button">Vận hành</button>
+          <button class="dashboard-tab" data-dashboard-tab-button="done" role="tab" aria-selected="false" type="button">Hoàn tất</button>
           <button class="dashboard-tab" data-dashboard-tab-button="revenue" role="tab" aria-selected="false" type="button">Doanh thu</button>
           <button class="dashboard-tab" data-dashboard-tab-button="management" role="tab" aria-selected="false" type="button">Quản lý</button>
         </div>
@@ -111,26 +112,13 @@
           </div>
         </section>
 
-        <section class="stats-grid" data-dashboard-view="operations">
-          <article class="stat-card">
-            <span>Dang cho</span>
-            <strong id="waitingCount">0</strong>
-          </article>
-          <article class="stat-card">
-            <span>Dang chup</span>
-            <strong id="shootingCount">0</strong>
-          </article>
-          <article class="stat-card">
-            <span>Cho in</span>
-            <strong id="printCount">0</strong>
-          </article>
-          <article class="stat-card">
-            <span>Hoan tat</span>
-            <strong id="doneCount">0</strong>
-          </article>
+                <section class="stats-grid" data-dashboard-view="operations">
+          <article class="stat-card"><span>Chờ thanh toán</span><strong id="waitingCount">0</strong></article>
+          <article class="stat-card"><span>Chờ chụp</span><strong id="shootingCount">0</strong></article>
+          <article class="stat-card"><span>Đang chụp</span><strong id="printCount">0</strong></article>
+          <article class="stat-card"><span>Chờ in</span><strong id="doneCount">0</strong></article>
         </section>
-
-        <section class="panel store-checkin-panel" id="storeCheckin" data-dashboard-view="management">
+<section class="panel store-checkin-panel" id="storeCheckin" data-dashboard-view="management">
           <div>
             <p class="eyebrow">QR chung cửa hàng</p>
             <h2>Khách tự chọn phòng và gói chụp</h2>
@@ -143,29 +131,49 @@
           </div>
         </section>
 
-        <section class="panel" id="queue" data-dashboard-view="operations">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">01 / Queue</p>
-              <h2>Hang cho sau thanh toan</h2>
+                                        <section class="ops-board" data-dashboard-view="operations">
+          <section class="panel ops-column" id="queue">
+            <div class="section-head compact-head">
+              <div><p class="eyebrow">01 / Payment</p><h2>Chờ thanh toán</h2></div>
             </div>
-            <button class="primary-btn" id="callNextBtn" type="button">Goi so tiep theo</button>
-          </div>
-          <div class="session-list" id="queueList"></div>
+            <div class="session-list" id="queueList"></div>
+          </section>
+
+          <section class="panel ops-column" id="shootingQueue">
+            <div class="section-head compact-head">
+              <div><p class="eyebrow">02 / Queue</p><h2>Chờ chụp</h2></div>
+              <span class="pill">Xếp theo thứ tự</span>
+            </div>
+            <div class="session-list" id="shootQueueList"></div>
+          </section>
+
+          <section class="panel ops-column" id="shooting">
+            <div class="section-head compact-head">
+              <div><p class="eyebrow">03 / Shooting</p><h2>Đang chụp</h2></div>
+              <span class="pill">1 phiên nhận Incoming</span>
+            </div>
+            <div class="active-session" id="activeSession"></div>
+          </section>
+
+          <section class="panel ops-column" id="print">
+            <div class="section-head compact-head">
+              <div><p class="eyebrow">04 / Print</p><h2>Chờ in</h2></div>
+            </div>
+            <div class="session-list" id="printList"></div>
+          </section>
         </section>
 
-        <section class="panel" id="shooting" data-dashboard-view="operations">
+        <section class="panel done-view" id="delivery" data-dashboard-view="done">
           <div class="section-head">
             <div>
-              <p class="eyebrow">02 / Shooting</p>
-              <h2>Phien dang active</h2>
+              <p class="eyebrow">Done</p>
+              <h2>Hoàn tất / đối soát</h2>
             </div>
-            <span class="pill">Chi 1 session nhan anh tu Incoming</span>
+            <span class="pill">Các phiên đã in xong</span>
           </div>
-          <div class="active-session" id="activeSession"></div>
+          <div class="session-list" id="deliveryList"></div>
         </section>
-
-        <section class="panel" id="auto-filter" hidden>
+<section class="panel" id="auto-filter" hidden>
           <div class="section-head">
             <div>
               <p class="eyebrow">03 / Auto filter</p>
@@ -209,26 +217,6 @@
             </div>
           </div>
           <div class="session-list" id="retouchList"></div>
-        </section>
-
-        <section class="panel" id="print" data-dashboard-view="operations">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">05 / Print</p>
-              <h2>File final cho nhan vien in</h2>
-            </div>
-          </div>
-          <div class="session-list" id="printList"></div>
-        </section>
-
-        <section class="panel" id="delivery" data-dashboard-view="management">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">06 / Delivery</p>
-              <h2>ZIP cuoi cung / FotoShare tuy chon</h2>
-            </div>
-          </div>
-          <div class="session-list" id="deliveryList"></div>
         </section>
 
         <section class="panel" id="packages" data-dashboard-view="management">

@@ -31,6 +31,7 @@ server.log
 *.db-*
 
 # Generated media and archives
+_github_upload/
 *.mp4
 *.mov
 *.zip

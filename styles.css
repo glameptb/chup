@@ -124,9 +124,31 @@ a {
   padding: 30px clamp(18px, 4vw, 56px) 56px;
 }
 
+body[data-dashboard-view="operations"] {
+  overflow: hidden;
+}
+
+body[data-dashboard-view="operations"] .main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  padding: 18px 24px;
+  overflow: hidden;
+}
+
+body[data-dashboard-view="operations"] .topbar {
+  display: none;
+}
+
+body[data-dashboard-view="operations"] .dashboard-tabs,
+body[data-dashboard-view="operations"] .stats-grid {
+  flex: 0 0 auto;
+}
+
 .dashboard-tabs {
   display: inline-grid;
-  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
   gap: 3px;
   margin: 0 0 20px;
   padding: 3px;
@@ -206,12 +228,15 @@ body[data-dashboard-view="operations"] .topbar .actions {
 .revenue-pin-modal input { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 18px; }
 
 @media (max-width: 1100px) {
+  .ops-board { grid-template-columns: 1fr; }
+  .ops-column .staff-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ops-column .staff-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
   .revenue-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .revenue-primary { grid-column: span 2; }
 }
 
 @media (max-width: 720px) {
-  .dashboard-tabs { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard-tabs { width: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .dashboard-tab { min-width: 0; padding-inline: 8px; }
   .revenue-head { align-items: stretch; flex-direction: column; }
   .revenue-custom-range { justify-content: stretch; align-items: stretch; flex-wrap: wrap; }
@@ -341,7 +366,7 @@ h2 {
 
 .stats-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .stat-card,
@@ -353,6 +378,15 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--white);
+}
+
+body[data-dashboard-view="operations"] .stat-card {
+  padding: 12px 16px;
+}
+
+body[data-dashboard-view="operations"] .stat-card strong {
+  margin-top: 4px;
+  font-size: 28px;
 }
 
 .stat-card span,
@@ -377,6 +411,72 @@ h2 {
   gap: 12px;
 }
 
+.ops-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 20px;
+}
+
+.ops-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+.compact-head h2 {
+  font-size: 22px;
+}
+
+.ops-head-actions {
+  margin: 12px 0 14px;
+}
+
+.ops-subhead {
+  margin: 14px 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.ops-column .staff-row {
+  grid-template-columns: 44px 1fr 1.25fr 1.15fr 1fr auto;
+  align-items: center;
+}
+
+.ops-column .staff-row .row-actions {
+  grid-column: auto;
+  justify-content: flex-end;
+}
+
+.ops-column .session-list,
+.ops-column .active-session {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#shootingQueue .session-list,
+#shooting .active-session,
+#print .session-list,
+#queue .session-list {
+  flex: 1 1 0;
+}
+
+.queue-order strong {
+  font-size: 24px;
+}
+
+.timer-cell strong {
+  color: var(--danger);
+  font-size: 22px;
+}
+
 .session-card-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -394,6 +494,62 @@ h2 {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--muted);
+}
+
+.staff-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.4fr 1.2fr 1fr 1.4fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+}
+
+.payment-row {
+  grid-template-columns: 1.1fr 1fr 1.4fr 1.4fr 1fr auto;
+}
+
+.staff-row.is-active {
+  border-color: rgba(194, 143, 45, 0.72);
+  background: #fff7e8;
+}
+
+.staff-row span,
+.staff-row small {
+  display: block;
+  color: var(--muted);
+}
+
+.staff-row span {
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.staff-row strong {
+  display: block;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.staff-row small {
+  font-size: 11px;
+}
+
+.ops-column .primary-btn,
+.ops-column .ghost-btn,
+.ops-column .danger-btn {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.staff-row .row-actions {
+  justify-content: flex-end;
 }
 
 .active-card {

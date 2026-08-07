@@ -339,6 +339,11 @@ function renderCustomerGate() {
 async function refreshCustomerSessionView() {
   await refreshSessionStoreFromServer();
   const { session } = getCurrentSession();
+  if (session?.status === "COMPLETED") {
+    localStorage.removeItem(CUSTOMER_DRAFT_KEY);
+    window.location.replace("checkin.html");
+    return;
+  }
   syncSessionPhotos(session);
   const isFinalStatus = ["FINAL_READY", "SENT_TO_PRINT_STAFF", "PRINTED", "COMPLETED"].includes(session?.status);
   if (isFinalStatus && customerState.completedFinals.length >= customerState.printCount) {

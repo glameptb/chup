@@ -48,6 +48,33 @@ const statusLabels = {
   CAMERA_ERROR: "Lỗi camera",
 };
 
+Object.assign(packages["3"], { name: "Gói 3 phút", autoEdit: "Không gồm chỉnh sửa tự động" });
+Object.assign(packages["5"], { name: "Gói 5 phút", autoEdit: "Có thể yêu cầu chỉnh sửa tự động" });
+Object.assign(packages["10"], { name: "Gói 10 phút", frames: "Tất cả frame", autoEdit: "Có tùy chọn chỉnh sửa tự động" });
+Object.assign(statusLabels, {
+  CHECKED_IN: "Đã check-in",
+  PAYMENT_PENDING: "Chờ thanh toán",
+  PAYMENT_CASH_PENDING: "Chờ duyệt thanh toán",
+  WAITING: "Đang chờ",
+  CALLING: "Đang gọi",
+  NO_SHOW: "Vắng mặt",
+  REJOINED_QUEUE: "Vào lại hàng chờ",
+  READY_TO_SHOOT: "Sẵn sàng chụp",
+  SHOOTING: "Đang chụp",
+  PAUSED: "Tạm dừng",
+  RAW_READY: "Ảnh raw sẵn sàng",
+  RETOUCH_REQUESTED: "Yêu cầu chỉnh sửa tự động",
+  RETOUCH_IN_PROGRESS: "Đang chỉnh sửa tự động",
+  RETOUCH_READY: "Ảnh đã chỉnh sẵn sàng",
+  FINAL_READY: "Đã ghép đủ frame",
+  FINAL_EXPORTED: "Đã xuất final",
+  SENT_TO_PRINT_STAFF: "Chờ nhân viên in",
+  PRINTED: "Đã in",
+  ZIP_READY: "ZIP sẵn sàng",
+  COMPLETED: "Hoàn tất",
+  CAMERA_ERROR: "Lỗi camera",
+});
+
 loadPackageSettings();
 let state = loadState();
 let timers = new Map();
@@ -706,8 +733,9 @@ function completeRetouch(session) {
 }
 
 function markPrinted(session) {
-  session.status = "PRINTED";
+  session.status = "COMPLETED";
   session.printedAt = new Date().toISOString();
+  session.completedAt = session.printedAt;
   saveState();
   render();
 }
@@ -774,6 +802,50 @@ function formatTime(seconds = 0) {
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
+function formatDateTime(value) {
+  const date = new Date(value || Date.now());
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("vi-VN", { hour12: false });
+}
+
+function paymentMethodLabel(session) {
+  return ["cash", "CASH"].includes(session.paymentMethod) ? "Tiền mặt" : ["bank", "BANK_TRANSFER"].includes(session.paymentMethod) ? "Chuyển khoản" : (session.paymentMethod || "-");
+}
+
+function frameLabel(session) {
+  const frames = Array.isArray(session.availableFrames) && session.availableFrames.length
+    ? session.availableFrames
+    : defaultFrameCatalog.filter((frame) => (session.allowedFrames || []).includes(frame.id));
+  return frames.map((frame) => frame.name || frame.id).join(", ") || "-";
+}
+
+function codeLabel(session) {
+  return `${session.ticket || "-"} / ${session.id}`;
+}
+
+function isPaymentQueue(session) {
+  return ["PAYMENT_PENDING", "PAYMENT_CASH_PENDING", "CHECKED_IN"].includes(session.status) || session.paymentStatus === "CASH_PENDING";
+}
+
+function isShootQueue(session) {
+  return isShootWaiting(session) || isShootingActive(session);
+}
+
+function isShootWaiting(session) {
+  return ["WAITING", "REJOINED_QUEUE", "CALLING", "NO_SHOW"].includes(session.status);
+}
+
+function isShootingActive(session) {
+  return ["READY_TO_SHOOT", "SHOOTING", "PAUSED"].includes(session.status);
+}
+
+function isPrintQueue(session) {
+  return ["FINAL_READY", "SENT_TO_PRINT_STAFF", "FINAL_EXPORTED"].includes(session.status);
+}
+
+function isDoneQueue(session) {
+  return ["PRINTED", "ZIP_READY", "COMPLETED"].includes(session.status);
+}
+
 function card(session, body, actions = "") {
   return `
     <article class="session-card-row">
@@ -788,64 +860,69 @@ function card(session, body, actions = "") {
   `;
 }
 
+function staffCompactRow(session, cells, actions = "", extraClass = "") {
+  return `
+    <article class="staff-row compact-row ${extraClass}">
+      ${cells.map((cell) => `<div class="${cell.className || ""}"><span>${cell.label}</span><strong>${cell.value}</strong>${cell.note ? `<small>${cell.note}</small>` : ""}</div>`).join("")}
+      ${actions ? `<div class="row-actions">${actions}</div>` : ""}
+    </article>
+  `;
+}
+
 function renderQueue() {
-  const queue = state.sessions.filter((session) => ["PAYMENT_CASH_PENDING", "WAITING", "CALLING", "NO_SHOW", "REJOINED_QUEUE"].includes(session.status));
+  const queue = state.sessions.filter(isPaymentQueue);
   document.querySelector("#queueList").innerHTML = queue.length
-    ? queue
-        .map((session) => {
-          if (session.status === "PAYMENT_CASH_PENDING") {
-            return card(session, `${session.roomName || "Chưa chọn phòng"} - Chờ thu tiền mặt`, `<button class="primary-btn" data-action="confirm-cash" data-id="${session.id}" type="button">Xác nhận đã thu tiền</button>`);
-          }
-          if (session.status === "CALLING") {
-            return card(
-              session,
-              `Link khách: ${sessionUrl(session)}`,
-              `
-                <button class="primary-btn" data-action="present" data-id="${session.id}" type="button">Khách đã có mặt</button>
-                <button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link khach</button>
-                <button class="ghost-btn" data-action="rejoin" data-id="${session.id}" type="button">Đưa lại vào hàng chờ</button>
-              `
-            );
-          }
-          if (session.status === "NO_SHOW") {
-            return card(session, "Khách bị bỏ qua lượt, có thể đưa lại vào cuối hàng.", `<button class="ghost-btn" data-action="rejoin" data-id="${session.id}" type="button">Đưa lại vào hàng</button>`);
-          }
-          return card(session, `${session.roomName || "Phòng chưa đặt"} - Vị trí: ${queuePosition(session.id)} - Link khách: ${sessionUrl(session)}`, `<button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link khách</button>`);
-        })
-        .join("")
-    : '<div class="empty-state">Chưa có khách đã thanh toán trong hàng chờ.</div>';
+    ? queue.map((session, index) => staffCompactRow(session, [
+        { label: "STT", value: index + 1, className: "queue-order" },
+        { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
+        { label: "Gói", value: packageLabel(session) },
+        { label: "Frame", value: frameLabel(session) },
+        { label: "TT", value: paymentMethodLabel(session) },
+      ], `
+        <button class="primary-btn" data-action="confirm-cash" data-id="${session.id}" type="button">Đã thanh toán</button>
+        <button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link</button>
+      `, "payment-row")).join("")
+    : '<div class="empty-state">Chưa có phiếu chờ duyệt thanh toán.</div>';
 }
 
 function renderActive() {
-  const session = activeSession();
-  document.querySelector("#activeSession").innerHTML = session
-    ? `
-      <article class="active-card">
-        <div>
-          <p class="eyebrow">Active session</p>
-          <h2>${session.ticket} · ${session.id}</h2>
-          <p>${session.customerName} · ${packageLabel(session)}</p>
-          <strong>${formatTime(session.remainingSeconds)} còn lại</strong>
-          <span>Ảnh đã gom từ Incoming: ${session.rawCount || 0}</span>
-          <span>Folder digiCamControl hiện có: ${incomingFiles.length} ảnh</span>
-          <small>D:\\Photobooth\\Sessions\\${session.id}\\raw</small>
-          <div class="shooting-controls">
-            <button class="primary-btn" data-action="start-shooting" data-id="${session.id}" type="button" ${session.status === "SHOOTING" ? "disabled" : ""}>START</button>
-            <button class="ghost-btn" data-action="pause" data-id="${session.id}" type="button" ${session.status !== "SHOOTING" ? "disabled" : ""}>PAUSE</button>
-            <button class="danger-btn" data-action="finish-shooting" data-id="${session.id}" type="button">STOP</button>
-            <button class="ghost-btn" data-action="restart-shooting" data-id="${session.id}" type="button">RESTART</button>
-          </div>
-        </div>
-        <div class="action-grid">
-          <button class="primary-btn" data-action="import-incoming" data-id="${session.id}" type="button">Gom toàn bộ ${incomingFiles.length} ảnh từ digiCamControl</button>
-          <button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">QR khach</button>
-          <button class="ghost-btn" data-action="mock-photo" data-id="${session.id}" type="button">Chỉ thêm 1 ảnh demo</button>
-        </div>
-      </article>
-    `
-    : `<div class="empty-state">Folder digiCamControl hiện có ${incomingFiles.length} ảnh. Chưa có session active, hãy bấm “Khách đã có mặt” ở hàng chờ để bắt đầu chụp rồi mới gom ảnh.</div>`;
-}
+  const waiting = state.sessions.filter(isShootWaiting);
+  const activeList = state.sessions.filter(isShootingActive);
+  const waitingTarget = document.querySelector("#shootQueueList");
+  const activeTarget = document.querySelector("#activeSession");
 
+  if (waitingTarget) {
+    waitingTarget.innerHTML = waiting.length
+      ? waiting.map((session, index) => staffCompactRow(session, [
+          { label: "STT", value: index + 1, className: "queue-order" },
+          { label: "Mã", value: codeLabel(session) },
+          { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
+          { label: "Gói", value: packageLabel(session) },
+          { label: "Trạng thái", value: statusLabels[session.status] || session.status, note: `Raw ${session.rawCount || 0} ảnh` },
+        ], `<button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link</button>`, "shooting-row")).join("")
+      : '<div class="empty-state">Chưa có khách chờ chụp.</div>';
+  }
+
+  activeTarget.innerHTML = activeList.length
+    ? activeList.map((session) => {
+      const active = ["READY_TO_SHOOT", "SHOOTING", "PAUSED"].includes(session.status);
+      const controls = active ? `
+        <button class="primary-btn" data-action="start-shooting" data-id="${session.id}" type="button" ${session.status === "SHOOTING" ? "disabled" : ""}>START</button>
+        <button class="ghost-btn" data-action="pause" data-id="${session.id}" type="button" ${session.status !== "SHOOTING" ? "disabled" : ""}>PAUSE</button>
+        <button class="danger-btn" data-action="finish-shooting" data-id="${session.id}" type="button">STOP</button>
+        <button class="ghost-btn" data-action="restart-shooting" data-id="${session.id}" type="button">RESTART</button>
+        <button class="primary-btn" data-action="import-incoming" data-id="${session.id}" type="button">Gom ${incomingFiles.length}</button>
+      ` : "";
+      return staffCompactRow(session, [
+        { label: "Còn lại", value: formatTime(session.remainingSeconds || 0), className: "timer-cell" },
+        { label: "Mã", value: codeLabel(session) },
+        { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
+        { label: "Gói", value: packageLabel(session) },
+        { label: "Trạng thái", value: statusLabels[session.status] || session.status, note: `Raw ${session.rawCount || 0} ảnh` },
+      ], `${controls}<button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link</button>`, `shooting-row ${active ? "is-active" : ""}`);
+    }).join("")
+    : `<div class="empty-state">Chưa có phiên đang chụp. Folder digiCamControl hiện có ${incomingFiles.length} ảnh.</div>`;
+}
 function renderRetouch() {
   const list = state.sessions.filter((session) => ["RETOUCH_REQUESTED", "RETOUCH_IN_PROGRESS"].includes(session.status));
   document.querySelector("#retouchList").innerHTML = list.length
@@ -896,100 +973,52 @@ function renderAutoFilterMonitor() {
 }
 
 function renderPrint() {
-  const list = state.sessions.filter((session) => ["SENT_TO_PRINT_STAFF", "FINAL_EXPORTED"].includes(session.status));
+  const list = state.sessions.filter(isPrintQueue);
   document.querySelector("#printList").innerHTML = list.length
-    ? list
-        .map((session) =>
-          card(
-            session,
-            `File final: D:\\Photobooth\\Sessions\\${session.id}\\final\\${session.id}_final_01.jpg`,
-            `<button class="primary-btn" data-action="printed" data-id="${session.id}" type="button">Đánh dấu đã in</button>`
-          )
-        )
-        .join("")
+    ? list.map((session, index) => {
+      const jobs = Array.isArray(session.finalJobs) && session.finalJobs.length
+        ? session.finalJobs
+        : [{ index: 1, fileName: session.finalFile || `${session.id}_final_01.png`, url: session.finalUrl, localPath: session.finalLocalPath, printCode: session.printCode }];
+      const printCode = session.printCode || jobs.find((job) => job.printCode)?.printCode || session.ticket || session.id;
+      const links = jobs.map((job) => job.url
+        ? `<a class="ghost-btn" href="${job.url}" target="_blank" rel="noopener">File ${job.index || 1}</a>`
+        : `<span class="customer-note">${job.localPath || job.fileName || `File ${job.index || 1}`}</span>`).join("");
+      return staffCompactRow(session, [
+        { label: "STT", value: index + 1, className: "queue-order" },
+        { label: "Mã in", value: printCode },
+        { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
+        { label: "Gói", value: packageLabel(session) },
+        { label: "File", value: `${jobs.length}/${session.printCount || jobs.length || 1}`, note: statusLabels[session.status] || session.status },
+      ], `
+        <a class="ghost-btn" href="${sessionUrl(session)}" target="_blank" rel="noopener">Ghép</a>
+        ${links}
+        <button class="primary-btn" data-action="printed" data-id="${session.id}" type="button">Đã in</button>
+      `, "print-row");
+    }).join("")
     : '<div class="empty-state">Chưa có file final chờ in.</div>';
 }
-
-function renderPrint() {
-  const list = state.sessions.filter((session) => ["SENT_TO_PRINT_STAFF", "FINAL_EXPORTED"].includes(session.status));
-  document.querySelector("#printList").innerHTML = list.length
-    ? list
-        .map((session) => {
-          const finalPath = session.finalLocalPath || `D:\\Photobooth\\Sessions\\${session.id}\\final\\${session.finalFile || `${session.id}_final_01.png`}`;
-          const printLink = session.finalUrl
-            ? `<a class="ghost-btn" href="${session.finalUrl}" target="_blank" rel="noopener">Mo file in</a>`
-            : `<span class="customer-note">Chua co link file that. Khach can bam xuat final lai.</span>`;
-          return card(
-            session,
-            `File final: ${finalPath}`,
-            `
-              ${printLink}
-              <button class="primary-btn" data-action="printed" data-id="${session.id}" type="button">Danh dau da in</button>
-            `
-          );
-        })
-        .join("")
-    : '<div class="empty-state">Chua co file final cho in.</div>';
-}
-
-function renderPrint() {
-  const list = state.sessions.filter((session) => ["SENT_TO_PRINT_STAFF", "FINAL_EXPORTED"].includes(session.status));
-  document.querySelector("#printList").innerHTML = list.length
-    ? list
-        .map((session) => {
-          const jobs = Array.isArray(session.finalJobs) && session.finalJobs.length
-            ? session.finalJobs
-            : [{
-                index: 1,
-                fileName: session.finalFile || `${session.id}_final_01.png`,
-                url: session.finalUrl,
-                localPath: session.finalLocalPath,
-              }];
-          const total = session.printCount || jobs.length || 1;
-          const links = jobs
-            .map((job) => {
-              const printCode = job.printCode || `${session.ticket}-${String(job.index || 1).padStart(2, "0")}`;
-              const label = `${printCode} - Mở file ${job.index || 1}/${total}`;
-              return job.url
-                ? `<a class="ghost-btn" href="${job.url}" target="_blank" rel="noopener">${label}</a>`
-                : `<span class="customer-note">${job.localPath || job.fileName || label}</span>`;
-            })
-            .join("");
-          return card(
-            session,
-            `Mã in: ${jobs.map((job) => job.printCode || `${session.ticket}-${String(job.index || 1).padStart(2, "0")}`).join(" · ")} - ${jobs.length}/${total} file`,
-            `
-              ${links}
-              <button class="primary-btn" data-action="printed" data-id="${session.id}" type="button">Danh dau da in</button>
-            `
-          );
-        })
-        .join("")
-    : '<div class="empty-state">Chua co file final cho in.</div>';
-}
-
 function renderDelivery() {
-  const list = state.sessions.filter((session) => ["PRINTED", "ZIP_READY", "COMPLETED"].includes(session.status));
-  document.querySelector("#deliveryList").innerHTML = list.length
-    ? list
-        .map((session) => {
-          const actions =
-            session.status === "PRINTED"
-              ? `<button class="primary-btn" data-action="build-zip" data-id="${session.id}" type="button">Tạo ZIP cuối</button>`
-              : session.status === "ZIP_READY"
-                ? `<button class="primary-btn" data-action="complete" data-id="${session.id}" type="button">Hoàn tất phiên</button>`
-                : "";
-          return card(session, session.zipName ? `ZIP: ${session.zipName}` : "Sau khi in xong mới tạo ZIP cuối.", actions);
-        })
-        .join("")
-    : '<div class="empty-state">ZIP cuối và FotoShare chỉ xử lý sau khi ảnh đã in xong.</div>';
+  const target = document.querySelector("#deliveryList");
+  if (!target) return;
+  const list = state.sessions.filter(isDoneQueue);
+  target.innerHTML = list.length
+    ? list.map((session) => `
+      <article class="staff-row done-row">
+        <div><span>Ngày giờ</span><strong>${formatDateTime(session.completedAt || session.printedAt || session.updatedAt || session.createdAt)}</strong></div>
+        <div><span>Tên</span><strong>${session.customerName || "-"}</strong></div>
+        <div><span>SĐT</span><strong>${session.contact || "-"}</strong></div>
+        <div><span>Mã</span><strong>${codeLabel(session)}</strong></div>
+        <div><span>Gói</span><strong>${packageLabel(session)}</strong></div>
+        <div><span>Trạng thái</span><strong>${statusLabels[session.status] || session.status}</strong></div>
+      </article>
+    `).join("")
+    : '<div class="empty-state">Chưa có phiên hoàn tất.</div>';
 }
-
 function renderStats() {
-  document.querySelector("#waitingCount").textContent = state.sessions.filter((session) => ["WAITING", "CALLING", "REJOINED_QUEUE"].includes(session.status)).length;
-  document.querySelector("#shootingCount").textContent = state.sessions.filter((session) => ["READY_TO_SHOOT", "SHOOTING", "PAUSED"].includes(session.status)).length;
-  document.querySelector("#printCount").textContent = state.sessions.filter((session) => ["SENT_TO_PRINT_STAFF", "FINAL_EXPORTED"].includes(session.status)).length;
-  document.querySelector("#doneCount").textContent = state.sessions.filter((session) => ["PRINTED", "ZIP_READY", "COMPLETED"].includes(session.status)).length;
+  document.querySelector("#waitingCount").textContent = state.sessions.filter(isPaymentQueue).length;
+  document.querySelector("#shootingCount").textContent = state.sessions.filter(isShootWaiting).length;
+  document.querySelector("#printCount").textContent = state.sessions.filter(isShootingActive).length;
+  document.querySelector("#doneCount").textContent = state.sessions.filter(isPrintQueue).length;
 }
 
 function sessionRevenue(session) {
@@ -1397,7 +1426,7 @@ function saveAutoFilterSettingFromForm() {
   render();
 }
 
-document.querySelector("#callNextBtn").addEventListener("click", callNext);
+document.querySelector("#callNextBtn")?.addEventListener("click", callNext);
 document.querySelector("#seedBtn").addEventListener("click", createDemoSession);
 document.querySelector("#resetBtn").addEventListener("click", resetDemo);
 document.querySelector("#saveAutoFilterSettingBtn")?.addEventListener("click", saveAutoFilterSettingFromForm);
@@ -1436,7 +1465,7 @@ document.body.addEventListener("change", (event) => {
 });
 
 function setDashboardView(view) {
-  const activeView = ["operations", "revenue", "management"].includes(view) ? view : "operations";
+  const activeView = ["operations", "done", "revenue", "management"].includes(view) ? view : "operations";
   document.body.dataset.dashboardView = activeView;
   localStorage.setItem(DASHBOARD_VIEW_KEY, activeView);
   document.querySelectorAll("[data-dashboard-view]").forEach((section) => {

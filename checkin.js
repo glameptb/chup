@@ -134,7 +134,6 @@ async function createSession(paymentMethod) {
   const pack = packages[draft.packageId];
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const id = `GL-${today}-${code}`;
-  const paid = paymentMethod === "BANK_TRANSFER";
   const session = {
     id,
     ticket: code,
@@ -147,8 +146,8 @@ async function createSession(paymentMethod) {
     packagePrice: Number(pack.price || 0),
     paymentMethod,
     paymentCode: draft.paymentCode,
-    paymentStatus: paid ? "PAID" : "CASH_PENDING",
-    status: paid ? "WAITING" : "PAYMENT_CASH_PENDING",
+    paymentStatus: "CASH_PENDING",
+    status: "PAYMENT_CASH_PENDING",
     frameSlots: Number(pack.frameSlots || 4),
     printCount: Number(pack.printCount || 1),
     defaultFrameId: pack.defaultFrameId || null,
@@ -156,7 +155,7 @@ async function createSession(paymentMethod) {
     availableFrames: (pack.frameCatalog || defaultFrames).filter((frame) => (pack.allowedFrames || ["frame1", "frame2"]).includes(frame.id)),
     finalJobs: [], rawCount: 0,
     createdAt: new Date().toISOString(),
-    paidAt: paid ? new Date().toISOString() : null,
+    paidAt: null,
   };
   state.sessions.push(session);
   await saveState();
@@ -170,7 +169,7 @@ function showTicket(session) {
   const position = queue.findIndex((item) => item.id === session.id);
   const wait = Math.ceil(queue.slice(0, Math.max(0, position)).reduce((total, item) => total + sessionMinutes(item), 0));
   const cashPending = session.status === "PAYMENT_CASH_PENDING";
-  document.querySelector("#ticketTitle").textContent = cashPending ? "Chờ nhân viên xác nhận tiền mặt" : "Phiên đã vào hàng chờ";
+  document.querySelector("#ticketTitle").textContent = cashPending ? "Chờ nhân viên xác nhận thanh toán" : "Phiên đã vào hàng chờ";
   document.querySelector("#ticketNumber").textContent = session.ticket;
   document.querySelector("#ticketMeta").textContent = `${session.roomName} · ${pack?.name || session.packageId} · ${cashPending ? "Chưa xác nhận thanh toán" : "Đã thanh toán"}`;
   document.querySelector("#ticketWaitTime").textContent = cashPending ? "Chờ xác nhận" : `${wait} phút`;
