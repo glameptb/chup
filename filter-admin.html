@@ -60,15 +60,13 @@
               </div>
             </div>
             <div class="filter-chip-grid admin-filter-grid" id="adminFilterGrid">
-              <button class="filter-chip is-selected" data-filter="clean" type="button">Tự nhiên</button>
-              <button class="filter-chip" data-filter="bright" type="button">Sáng da</button>
-              <button class="filter-chip" data-filter="rosy" type="button">Hồng nhẹ</button>
-              <button class="filter-chip" data-filter="blackMist" type="button">Black mist</button>
+              <button class="filter-chip is-selected" data-filter="blackMist" type="button">Black mist</button>
               <button class="filter-chip" data-filter="dream" type="button">Dream soft glow</button>
-              <button class="filter-chip" data-filter="learned" id="adminLearnedFilterBtn" type="button" disabled>AI learned</button>
-              <button class="filter-chip" data-filter="magimir" type="button">Magimir mềm retro</button>
+              <button class="filter-chip" data-filter="learned" id="adminLearnedFilterBtn" type="button" disabled>Brown</button>
               <button class="filter-chip" data-filter="film" type="button">Film</button>
-              <button class="filter-chip" data-filter="bw" type="button">B&W</button>
+              <button class="filter-chip" data-filter="proNegStd" id="adminProNegStdFilterBtn" type="button" disabled>Pro Neg Std</button>
+              <button class="filter-chip" data-filter="classicChrome" id="adminClassicChromeFilterBtn" type="button" disabled>Classic Chrome</button>
+              <button class="filter-chip" data-filter="bw" type="button">B&amp;W film</button>
               <button class="filter-chip" data-filter="sample" id="adminSampleFilterBtn" type="button" disabled>Ảnh mẫu</button>
             </div>
             <label class="filter-intensity">
@@ -89,41 +87,13 @@
             </div>
           </div>
 
-          <div class="panel-lite">
-            <div class="section-head compact">
-              <div>
-                <p class="eyebrow">04 / Background automation</p>
-                <h2>Quản lý auto filter</h2>
-              </div>
-            </div>
-            <div class="background-manager">
-              <div class="filter-sample-tools">
-                <button class="primary-btn" id="autoDetectCurrentBtn" type="button">Nhận diện ảnh đang chọn</button>
-                <button class="ghost-btn" id="autoApplyByBackgroundBtn" type="button">Auto apply tất cả</button>
-              </div>
-              <div class="background-readout" id="backgroundReadout">Chưa nhận diện background.</div>
-              <label class="filter-intensity">
-                Background
-                <select id="backgroundRuleSelect"></select>
-              </label>
-              <label class="filter-intensity">
-                Filter mặc định cho background này
-                <select id="backgroundFilterSelect"></select>
-              </label>
-              <div class="filter-sample-tools">
-                <button class="ghost-btn" id="saveBackgroundRuleBtn" type="button">Lưu cấu hình chủ</button>
-                <button class="ghost-btn" id="resetBackgroundRulesBtn" type="button">Reset mặc định</button>
-              </div>
-              <p class="small-note">Chủ set rule một lần, nhân viên chỉ cần bấm auto apply khi nhận ảnh.</p>
-            </div>
-          </div>
         </div>
 
         <aside class="customer-preview">
           <div class="canvas-wrap admin-canvas-wrap">
             <canvas id="adminFilterCanvas" width="1200" height="1600"></canvas>
           </div>
-          <div class="filter-readout" id="filterReadout">Filter: Tự nhiên</div>
+          <div class="filter-readout" id="filterReadout">Filter: Black mist</div>
         </aside>
       </section>
     </main>

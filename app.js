@@ -2,8 +2,12 @@ const STORAGE_KEY = "glame-local-sessions-v1";
 const API_STATE_URL = "/api/state";
 const API_INCOMING_URL = "/api/incoming";
 const PACKAGE_SETTINGS_KEY = "glame-package-settings-v1";
+const DELETED_FRAME_IDS_KEY = "glame-deleted-frame-ids-v1";
 const DASHBOARD_VIEW_KEY = "glame-dashboard-view";
 const REVENUE_RANGE_KEY = "glame-revenue-range";
+const retouchFolderDrafts = new Map();
+const birthdayDrafts = new Map();
+let importingRetouchSessionId = "";
 const demoRawPhotos = [
   "dataset/raw/DSC_7138.jpg",
   "dataset/raw/DSC_15675.jpg",
@@ -16,15 +20,28 @@ const demoRawPhotos = [
 ];
 
 const packages = {
-  "3": { id: "3", name: "Gói 3 phút", minutes: 3, price: 99000, printCount: 1, frameSlots: 4, defaultFrameId: "frame1", allowedFrames: ["frame1"], frames: "Basic", autoEdit: "Không gồm chỉnh sửa tự động" },
-  "5": { id: "5", name: "Gói 5 phút", minutes: 5, price: 149000, printCount: 2, frameSlots: 4, defaultFrameId: "frame1", allowedFrames: ["frame1", "frame2"], frames: "Basic + Standard", autoEdit: "Có thể yêu cầu chỉnh sửa tự động" },
-  "10": { id: "10", name: "Gói 10 phút", minutes: 10, price: 249000, printCount: 3, frameSlots: 4, defaultFrameId: "frame1", allowedFrames: ["frame1", "frame2"], frames: "Tất cả frame", autoEdit: "Có tùy chọn chỉnh sửa tự động" },
+  "3": { id: "3", name: "Gói 3 phút", minutes: 3, price: 99000, printCount: 1, frameSlots: 4, defaultFrameId: "frame1", allowedFrames: ["frame1"], frames: "Basic", autoEdit: "Không gồm quán chỉnh ảnh" },
+  "5": { id: "5", name: "Gói 5 phút", minutes: 5, price: 149000, printCount: 2, frameSlots: 4, defaultFrameId: "frame1", allowedFrames: ["frame1", "frame2"], frames: "Basic + Standard", autoEdit: "Có thể yêu cầu quán chỉnh ảnh" },
+  "10": { id: "10", name: "Gói 10 phút", minutes: 10, price: 249000, printCount: 3, frameSlots: 4, defaultFrameId: "frame1", allowedFrames: ["frame1", "frame2"], frames: "Tất cả frame", autoEdit: "Có tùy chọn quán chỉnh ảnh" },
 };
 
 const defaultFrameCatalog = [
   { id: "frame1", name: "ChanBaek Rainbow", src: "assets/frame1-2.png", maxPhotos: 4 },
   { id: "frame2", name: "ChanBaek Red", src: "assets/frame2-2.png", maxPhotos: 4 },
 ];
+
+const uploadedFrameSlots = [
+  { x: 40, y: 328, w: 516, h: 308 },
+  { x: 40, y: 656, w: 516, h: 308 },
+  { x: 40, y: 984, w: 516, h: 308 },
+  { x: 40, y: 1312, w: 516, h: 308 },
+  { x: 644, y: 308, w: 512, h: 320 },
+  { x: 676, y: 660, w: 432, h: 372 },
+  { x: 644, y: 1060, w: 512, h: 340 },
+];
+
+const frameSlotColors = ["#ff4f7b", "#34c6ff", "#ffc84d", "#77dd77", "#b388ff", "#ff8a3d", "#36d1c4", "#f56bdc"];
+const frameClamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const statusLabels = {
   CHECKED_IN: "Đã check-in",
@@ -37,20 +54,21 @@ const statusLabels = {
   SHOOTING: "Đang chụp",
   PAUSED: "Tạm dừng",
   RAW_READY: "Ảnh raw sẵn sàng",
-  RETOUCH_REQUESTED: "Yêu cầu chỉnh sửa tự động",
-  RETOUCH_IN_PROGRESS: "Đang chỉnh sửa tự động",
-  RETOUCH_READY: "Ảnh đã chỉnh sẵn sàng",
+  RETOUCH_REQUESTED: "Khách yêu cầu quán chỉnh",
+  RETOUCH_IN_PROGRESS: "Đang chỉnh bằng MagiMir",
+  RETOUCH_READY: "Ảnh MagiMir đã gửi khách",
   FINAL_EXPORTED: "Đã xuất final",
   SENT_TO_PRINT_STAFF: "Chờ nhân viên in",
   PRINTED: "Đã in",
   ZIP_READY: "ZIP sẵn sàng",
   COMPLETED: "Hoàn tất",
+  REFUNDED: "Đã hoàn tiền",
   CAMERA_ERROR: "Lỗi camera",
 };
 
-Object.assign(packages["3"], { name: "Gói 3 phút", autoEdit: "Không gồm chỉnh sửa tự động" });
-Object.assign(packages["5"], { name: "Gói 5 phút", autoEdit: "Có thể yêu cầu chỉnh sửa tự động" });
-Object.assign(packages["10"], { name: "Gói 10 phút", frames: "Tất cả frame", autoEdit: "Có tùy chọn chỉnh sửa tự động" });
+Object.assign(packages["3"], { name: "Gói 3 phút", autoEdit: "Không gồm quán chỉnh ảnh" });
+Object.assign(packages["5"], { name: "Gói 5 phút", autoEdit: "Có thể yêu cầu quán chỉnh ảnh" });
+Object.assign(packages["10"], { name: "Gói 10 phút", frames: "Tất cả frame", autoEdit: "Có tùy chọn quán chỉnh ảnh" });
 Object.assign(statusLabels, {
   CHECKED_IN: "Đã check-in",
   PAYMENT_PENDING: "Chờ thanh toán",
@@ -63,15 +81,16 @@ Object.assign(statusLabels, {
   SHOOTING: "Đang chụp",
   PAUSED: "Tạm dừng",
   RAW_READY: "Ảnh raw sẵn sàng",
-  RETOUCH_REQUESTED: "Yêu cầu chỉnh sửa tự động",
-  RETOUCH_IN_PROGRESS: "Đang chỉnh sửa tự động",
-  RETOUCH_READY: "Ảnh đã chỉnh sẵn sàng",
+  RETOUCH_REQUESTED: "Khách yêu cầu quán chỉnh",
+  RETOUCH_IN_PROGRESS: "Đang chỉnh bằng MagiMir",
+  RETOUCH_READY: "Ảnh MagiMir đã gửi khách",
   FINAL_READY: "Đã ghép đủ frame",
   FINAL_EXPORTED: "Đã xuất final",
   SENT_TO_PRINT_STAFF: "Chờ nhân viên in",
   PRINTED: "Đã in",
   ZIP_READY: "ZIP sẵn sàng",
   COMPLETED: "Hoàn tất",
+  REFUNDED: "Đã hoàn tiền",
   CAMERA_ERROR: "Lỗi camera",
 });
 
@@ -110,20 +129,38 @@ const autoFilterOptions = [
   { key: "film", label: "Film" },
   { key: "clean", label: "Tu nhien" },
 ];
+let packageSettingsSaveTimer = null;
 
 function loadPackageSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(PACKAGE_SETTINGS_KEY));
     if (!stored || typeof stored !== "object") return;
     Object.entries(stored).forEach(([id, patch]) => {
-      if (!packages[id]) return;
+      if (!packages[id]) {
+        packages[id] = {
+          id,
+          name: patch.name || `Goi ${Number(patch.minutes || 3)} phut`,
+          minutes: Math.max(1, Number(patch.minutes || 3)),
+          price: Math.max(0, Number(patch.price || 0)),
+          printCount: 1,
+          frameSlots: 4,
+          defaultFrameId: null,
+          allowedFrames: [],
+          printFrameIds: [],
+          frames: "",
+          autoEdit: "",
+        };
+      }
       packages[id] = {
         ...packages[id],
-        price: Number(patch.price || packages[id].price),
+        name: patch.name || packages[id].name,
+        minutes: Math.max(1, Number(patch.minutes || packages[id].minutes || 3)),
+        price: Math.max(0, Number(patch.price ?? packages[id].price ?? 0)),
         printCount: Math.max(1, Number(patch.printCount || packages[id].printCount || 1)),
         frameSlots: Math.max(1, Number(patch.frameSlots || packages[id].frameSlots || 4)),
         defaultFrameId: Object.prototype.hasOwnProperty.call(patch, "defaultFrameId") ? patch.defaultFrameId : packages[id].defaultFrameId,
         allowedFrames: Array.isArray(patch.allowedFrames) ? patch.allowedFrames : packages[id].allowedFrames,
+        printFrameIds: [],
         frameCatalog: Array.isArray(patch.frameCatalog) ? patch.frameCatalog : packages[id].frameCatalog,
       };
     });
@@ -136,12 +173,15 @@ function savePackageSettings() {
   const data = {};
   Object.values(packages).forEach((pack) => {
     data[pack.id] = {
+      name: pack.name,
+      minutes: Math.max(1, Number(pack.minutes || 3)),
       price: pack.price,
       printCount: pack.printCount || 1,
       frameSlots: pack.frameSlots || 4,
       defaultFrameId: pack.defaultFrameId || null,
       optionalFrames: (pack.allowedFrames || []).filter((frameId) => frameId !== pack.defaultFrameId),
       allowedFrames: pack.allowedFrames || ["frame1", "frame2"],
+      printFrameIds: [],
       frameCatalog: getPackageFrameCatalog(pack),
     };
   });
@@ -152,10 +192,62 @@ function savePackageSettings() {
   }
 }
 
+function schedulePackageSettingsSave() {
+  window.clearTimeout(packageSettingsSaveTimer);
+  const data = Object.fromEntries(Object.values(packages).map((pack) => [pack.id, {
+    name: pack.name,
+    minutes: Math.max(1, Number(pack.minutes || 3)),
+    price: Math.max(0, Number(pack.price || 0)),
+    printCount: pack.printCount || 1,
+    frameSlots: pack.frameSlots || 4,
+    defaultFrameId: pack.defaultFrameId || null,
+    allowedFrames: pack.allowedFrames || [],
+    printFrameIds: [],
+    frameCatalog: getPackageFrameCatalog(pack),
+  }]));
+  localStorage.setItem(PACKAGE_SETTINGS_KEY, JSON.stringify(data));
+  if (state) state.packageSettings = data;
+  packageSettingsSaveTimer = window.setTimeout(() => savePackageSettings(), 500);
+}
+
+function getDeletedFrameIds() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(DELETED_FRAME_IDS_KEY) || "[]");
+    return new Set(Array.isArray(ids) ? ids : []);
+  } catch {
+    localStorage.removeItem(DELETED_FRAME_IDS_KEY);
+    return new Set();
+  }
+}
+
+function saveDeletedFrameIds(ids) {
+  localStorage.setItem(DELETED_FRAME_IDS_KEY, JSON.stringify([...ids]));
+}
+
 function getPackageFrameCatalog(pack) {
+  const deleted = getDeletedFrameIds();
   const custom = Array.isArray(pack.frameCatalog) ? pack.frameCatalog : [];
-  const byId = new Map(defaultFrameCatalog.concat(custom).map((frame) => [frame.id, frame]));
+  const byId = new Map(defaultFrameCatalog.concat(custom).filter((frame) => !deleted.has(frame.id)).map((frame) => [frame.id, frame]));
   return [...byId.values()];
+}
+
+function getAllFrames() {
+  const byId = new Map();
+  Object.values(packages).forEach((pack) => {
+    getPackageFrameCatalog(pack).forEach((frame) => byId.set(frame.id, { ...byId.get(frame.id), ...frame }));
+  });
+  return [...byId.values()];
+}
+
+function syncFrameToAllPackages(frame) {
+  Object.values(packages).forEach((pack) => {
+    pack.frameCatalog = getPackageFrameCatalog(pack).map((item) => (
+      item.id === frame.id ? { ...item, ...frame } : item
+    ));
+    if (!pack.frameCatalog.some((item) => item.id === frame.id)) {
+      pack.frameCatalog.push(frame);
+    }
+  });
 }
 
 function renderPackageSettings() {
@@ -164,39 +256,40 @@ function renderPackageSettings() {
   target.innerHTML = Object.values(packages).map((pack) => {
     const allowed = new Set(pack.allowedFrames || ["frame1", "frame2"]);
     const frameCatalog = getPackageFrameCatalog(pack);
-    const defaultFrameId = pack.defaultFrameId || null;
     const selectedFrames = frameCatalog.filter((frame) => allowed.has(frame.id));
-    const printCount = Math.max(1, selectedFrames.length);
+    const printCount = Math.max(1, Number(pack.printCount || 1));
     const slotCounts = [...new Set(selectedFrames.map((frame) => Number(frame.maxPhotos || 4)))];
-    const slotLabel = slotCounts.length === 1 ? `${slotCounts[0]} ảnh/frame` : "Số ảnh theo từng frame";
+    const slotLabel = slotCounts.length === 1 ? `${slotCounts[0]} ảnh/frame` : "Số ảnh theo từng lượt";
     return `
       <article class="session-card-row package-setting-card" data-package-id="${pack.id}">
         <div>
-          <strong>${pack.name}</strong>
-          <span>${money.format(pack.price)}đ · ${printCount} frame / ${printCount} tấm in · ${slotLabel}</span>
-          <small>Mỗi frame đã chọn tương ứng một file final và một tấm in.</small>
+          <strong data-package-summary-name>${pack.name}</strong>
+          <span data-package-summary>${Number(pack.minutes || 3)} phut · ${money.format(pack.price)}đ · ${printCount} bản ghép / ${printCount} tấm in · ${slotLabel}</span>
+          <small>Tick frame được phép dùng cho gói, rồi chọn frame cho từng bản ghép cần in.</small>
         </div>
         <div class="row-actions package-setting-actions">
+          <label class="filter-intensity">Ten goi
+            <input data-package-field="name" type="text" value="${pack.name}" />
+          </label>
+          <label class="filter-intensity">So phut
+            <input data-package-field="minutes" type="number" min="1" step="1" value="${Number(pack.minutes || 3)}" />
+          </label>
+          <label class="filter-intensity">So tam in
+            <input data-package-field="printCount" type="number" min="1" step="1" value="${printCount}" />
+          </label>
           <label class="filter-intensity">Gia
             <input data-package-field="price" type="number" min="0" step="1000" value="${pack.price}" />
-          </label>
-          <label class="file-btn package-frame-upload">
-            Upload frame PNG
-            <input data-package-frame-upload type="file" accept="image/png,image/webp,image/jpeg" />
           </label>
           <div class="package-frame-list">
             ${frameCatalog.map((frame) => `
               <div class="package-frame-option">
-                <img src="${frame.src}" alt="${frame.name}" />
+                <img src="${frameAssetSrc(frame.src)}" alt="${frame.name}" />
                 <span>${frame.name}</span>
                 <label class="package-frame-control">
-                  <input data-package-default-frame type="checkbox" value="${frame.id}" ${defaultFrameId === frame.id ? "checked" : ""} />
-                  Đặt làm mặc định
+                  <input data-package-frame="${frame.id}" type="checkbox" ${allowed.has(frame.id) ? "checked" : ""} />
+                  Dung trong goi
                 </label>
-                <label class="package-frame-control">
-                  <input data-package-frame="${frame.id}" type="checkbox" ${allowed.has(frame.id) && defaultFrameId !== frame.id ? "checked" : ""} />
-                  Frame tùy chọn
-                </label>
+                <button class="ghost-btn package-frame-test" data-frame-test="${frame.id}" data-package-test="${pack.id}" type="button">Chỉnh slot</button>
               </div>
             `).join("")}
           </div>
@@ -204,26 +297,145 @@ function renderPackageSettings() {
       </article>
     `;
   }).join("");
+  target.querySelectorAll(".package-setting-card").forEach((card) => {
+    const pack = packages[card.dataset.packageId];
+    const printCount = Math.max(1, Number(pack?.printCount || 1));
+    const summary = card.querySelector("[data-package-summary]");
+    const note = card.querySelector("small");
+    if (summary) summary.textContent = `${Number(pack?.minutes || 3)} phut · ${money.format(pack?.price || 0)}d · ${printCount} tam in`;
+    if (summary) summary.textContent = `${Number(pack?.minutes || 3)} phut - ${money.format(pack?.price || 0)}d - ${printCount} tam in`;
+    if (note) note.textContent = "Tick frame de hien thi tren man khach. Khach se chon frame cho tung tam ghep/in.";
+  });
+}
+
+function renderFrameManager() {
+  const target = document.querySelector("#frameManagerList");
+  if (!target) return;
+  const frames = getAllFrames();
+  target.innerHTML = frames.map((frame) => {
+    return `
+      <article class="package-frame-option frame-manager-card" data-managed-frame="${frame.id}">
+        <img src="${frameAssetSrc(frame.src)}" alt="${frame.name}" />
+        <span>${frame.name}</span>
+        <small>${Number(frame.maxPhotos || 4)} slot ảnh</small>
+        <div class="frame-manager-actions">
+          <button class="ghost-btn package-frame-test" data-frame-manager-edit="${frame.id}" type="button">Chỉnh slot layout</button>
+          <button class="danger-btn frame-manager-delete" data-frame-manager-delete="${frame.id}" type="button">Xóa frame</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function deleteManagedFrame(frameId) {
+  const frame = getAllFrames().find((item) => item.id === frameId);
+  if (!frame) return;
+  if (!window.confirm(`Xoa frame "${frame.name || frameId}" khoi quan ly frame?`)) return;
+  const deleted = getDeletedFrameIds();
+  deleted.add(frameId);
+  saveDeletedFrameIds(deleted);
+
+  Object.values(packages).forEach((pack) => {
+    pack.frameCatalog = (Array.isArray(pack.frameCatalog) ? pack.frameCatalog : []).filter((item) => item.id !== frameId);
+    const catalog = getPackageFrameCatalog(pack);
+    pack.allowedFrames = (pack.allowedFrames || []).filter((id) => id !== frameId && catalog.some((item) => item.id === id));
+    if (!pack.allowedFrames.length) {
+      pack.allowedFrames = catalog[0]?.id ? [catalog[0].id] : [];
+    }
+    pack.printFrameIds = [];
+    if (pack.defaultFrameId === frameId || !pack.allowedFrames.includes(pack.defaultFrameId)) {
+      pack.defaultFrameId = pack.allowedFrames[0] || null;
+    }
+    const primaryFrame = catalog.find((item) => item.id === pack.defaultFrameId);
+    pack.frameSlots = Number(primaryFrame?.maxPhotos || pack.frameSlots || 4);
+  });
+
+  state.sessions.forEach((session) => {
+    session.availableFrames = (session.availableFrames || []).filter((item) => item.id !== frameId);
+    session.allowedFrames = (session.allowedFrames || []).filter((id) => id !== frameId);
+    session.printFrameIds = [];
+    if (session.defaultFrameId === frameId) session.defaultFrameId = session.allowedFrames[0] || null;
+    if (!session.allowedFrames.length && session.availableFrames.length) {
+      session.allowedFrames = [session.availableFrames[0].id];
+    }
+    if (!session.defaultFrameId && session.allowedFrames.length) {
+      session.defaultFrameId = session.allowedFrames[0];
+    }
+    const primaryFrame = (session.availableFrames || []).find((item) => item.id === session.defaultFrameId) || (session.availableFrames || [])[0];
+    if (primaryFrame) session.frameSlots = Number(primaryFrame.maxPhotos || session.frameSlots || 4);
+  });
+
+  savePackageSettings();
+  render();
+  showToast(`Da xoa frame ${frame.name || frameId}.`);
 }
 
 function savePackageSettingsFromForm() {
   document.querySelectorAll("[data-package-id]").forEach((card) => {
     const pack = packages[card.dataset.packageId];
     if (!pack) return;
+    pack.name = card.querySelector('[data-package-field="name"]')?.value.trim() || pack.name;
+    pack.minutes = Math.max(1, Number(card.querySelector('[data-package-field="minutes"]')?.value || pack.minutes || 3));
+    pack.printCount = Math.max(1, Number(card.querySelector('[data-package-field="printCount"]')?.value || pack.printCount || 1));
     pack.price = Math.max(0, Number(card.querySelector('[data-package-field="price"]')?.value || pack.price));
-    pack.defaultFrameId = card.querySelector("[data-package-default-frame]:checked")?.value || null;
-    const optionalFrames = [...card.querySelectorAll("[data-package-frame]:checked")].map((input) => input.dataset.packageFrame);
-    pack.allowedFrames = Array.from(new Set([...(pack.defaultFrameId ? [pack.defaultFrameId] : []), ...optionalFrames]));
-    if (!pack.allowedFrames.length) pack.allowedFrames = getPackageFrameCatalog(pack).map((frame) => frame.id);
     pack.frameCatalog = getPackageFrameCatalog(pack);
-    const selectedFrames = pack.frameCatalog.filter((frame) => pack.allowedFrames.includes(frame.id));
-    pack.printCount = Math.max(1, selectedFrames.length);
-    const primaryFrame = selectedFrames.find((frame) => frame.id === pack.defaultFrameId) || selectedFrames[0];
+    const checkedFrames = [...card.querySelectorAll("[data-package-frame]:checked")].map((input) => input.dataset.packageFrame).filter(Boolean);
+    pack.allowedFrames = checkedFrames.length ? Array.from(new Set(checkedFrames)) : pack.frameCatalog.map((frame) => frame.id).slice(0, 1);
+    pack.printFrameIds = [];
+    pack.defaultFrameId = pack.allowedFrames[0] || null;
+    const primaryFrame = pack.frameCatalog.find((frame) => frame.id === pack.defaultFrameId);
     pack.frameSlots = Number(primaryFrame?.maxPhotos || 4);
   });
   savePackageSettings();
   showToast("Da luu cau hinh goi chup.");
   render();
+}
+
+function updatePackageField(input) {
+  const card = input.closest("[data-package-id]");
+  const pack = packages[card?.dataset.packageId];
+  if (!pack) return;
+  const field = input.dataset.packageField;
+  if (field === "name") pack.name = input.value.trim() || pack.name;
+  if (field === "minutes") pack.minutes = Math.max(1, Number(input.value || 1));
+  if (field === "printCount") {
+    pack.printCount = Math.max(1, Number(input.value || 1));
+  }
+  if (field === "price") pack.price = Math.max(0, Number(input.value || 0));
+  if (state?.packageSettings?.[pack.id]) {
+    state.packageSettings[pack.id].name = pack.name;
+    state.packageSettings[pack.id].minutes = pack.minutes;
+    state.packageSettings[pack.id].printCount = pack.printCount;
+    state.packageSettings[pack.id].printFrameIds = [];
+    state.packageSettings[pack.id].price = pack.price;
+  }
+  card.querySelector("[data-package-summary-name]").textContent = pack.name;
+  card.querySelector("[data-package-summary]").textContent = `${Number(pack.minutes || 3)} phut · ${money.format(pack.price)}đ`;
+  card.querySelector("[data-package-summary]").textContent = `${Number(pack.minutes || 3)} phut - ${money.format(pack.price)}d - ${pack.printCount || 1} tam in`;
+  schedulePackageSettingsSave();
+}
+
+function addPackage() {
+  const id = `custom-${Date.now()}`;
+  const frames = getAllFrames();
+  const firstFrame = frames[0];
+  packages[id] = {
+    id,
+    name: "Goi moi",
+    minutes: 3,
+    price: 0,
+    printCount: 1,
+    frameSlots: Number(firstFrame?.maxPhotos || 4),
+    defaultFrameId: firstFrame?.id || null,
+    allowedFrames: firstFrame ? [firstFrame.id] : [],
+    printFrameIds: [],
+    frameCatalog: frames,
+    frames: "",
+    autoEdit: "",
+  };
+  savePackageSettings();
+  render();
+  showToast("Da them goi chup moi.");
 }
 
 function fileToDataUrl(file) {
@@ -235,40 +447,549 @@ function fileToDataUrl(file) {
   });
 }
 
-async function uploadPackageFrame(input) {
+function frameAssetSrc(src) {
+  if (window.location.protocol === "file:" && String(src || "").startsWith("/")) {
+    return `http://127.0.0.1:4173${src}`;
+  }
+  return src;
+}
+
+async function uploadManagedFrame(input) {
   const file = input.files?.[0];
   input.value = "";
   if (!file) return;
-  const card = input.closest("[data-package-id]");
-  const pack = packages[card?.dataset.packageId];
-  if (!pack) return;
   if (!file.type.startsWith("image/")) {
     showToast("Chi upload file anh PNG/WebP/JPG.");
     return;
   }
   try {
     const image = await fileToDataUrl(file);
-    const response = await fetch("/api/frame", {
+    const frameApi = window.location.protocol === "file:" ? "http://127.0.0.1:4173/api/frame" : "/api/frame";
+    const response = await fetch(frameApi, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: file.name, image }),
     });
-    if (!response.ok) throw new Error("Cannot upload frame");
+    if (!response.ok) throw new Error(`Upload failed ${response.status}`);
     const uploaded = await response.json();
     const frame = {
       id: uploaded.id,
       name: uploaded.name || file.name.replace(/\.[^.]+$/, ""),
       src: uploaded.src,
-      maxPhotos: pack.frameSlots || 4,
+      maxPhotos: 1,
+      slots: [],
     };
-    pack.frameCatalog = getPackageFrameCatalog(pack).concat(frame);
-    pack.allowedFrames = Array.from(new Set([...(pack.allowedFrames || []), frame.id]));
+    syncFrameToAllPackages(frame);
+    const firstPack = packages["3"] || Object.values(packages)[0];
     savePackageSettings();
-    showToast(`Da upload frame ${frame.name}.`);
+    renderFrameManager();
     renderPackageSettings();
-  } catch {
-    showToast("Upload frame chua thanh cong. Thu lai voi file nho hon.");
+    showToast(`Đã upload ${frame.name}. Frame đã có trong tất cả gói, tick gói nào muốn áp dụng.`);
+    await testPackageFrame(firstPack?.id || "3", frame.id);
+  } catch (error) {
+    showToast(`Upload frame chua thanh cong: ${error.message || "kiem tra server local"}.`);
   }
+}
+
+function toggleFramePackage(frameId, packageId, enabled) {
+  const pack = packages[packageId];
+  const frame = getAllFrames().find((item) => item.id === frameId);
+  if (!pack || !frame) return;
+  syncFrameToAllPackages(frame);
+  const allowed = new Set(pack.allowedFrames || []);
+  if (enabled) {
+    allowed.add(frameId);
+  } else {
+    allowed.delete(frameId);
+  }
+  pack.allowedFrames = [...allowed];
+  const catalog = getPackageFrameCatalog(pack);
+  if (!pack.allowedFrames.length && catalog[0]?.id) pack.allowedFrames = [catalog[0].id];
+  pack.printFrameIds = [];
+  pack.defaultFrameId = pack.allowedFrames[0] || null;
+  const primaryFrame = catalog.find((item) => item.id === pack.defaultFrameId);
+  pack.frameSlots = Number(primaryFrame?.maxPhotos || 4);
+  savePackageSettings();
+  renderFrameManager();
+  renderPackageSettings();
+}
+
+function packageFrameSlots(frame) {
+  if (Array.isArray(frame.slots) && frame.slots.length) return frame.slots;
+  if (frame.id === "frame1") {
+    return [
+      { x: 64, y: 138, w: 512, h: 660 },
+      { x: 626, y: 220, w: 512, h: 710 },
+      { x: 64, y: 916, w: 512, h: 660 },
+      { x: 626, y: 1000, w: 512, h: 670 },
+    ];
+  }
+  if (frame.id === "frame2") {
+    return [
+      { x: 44, y: 110, w: 545, h: 720 },
+      { x: 614, y: 110, w: 545, h: 720 },
+      { x: 44, y: 860, w: 545, h: 720 },
+      { x: 614, y: 860, w: 545, h: 720 },
+    ];
+  }
+  return uploadedFrameSlots.slice(0, Number(frame.maxPhotos || 4));
+}
+
+function defaultCustomFrameSlots(canvas) {
+  if (canvas.width > canvas.height) {
+    return [
+      { x: Math.round(canvas.width * 0.06), y: Math.round(canvas.height * 0.34), w: Math.round(canvas.width * 0.34), h: Math.round(canvas.width * 0.34 * 2 / 3) },
+      { x: Math.round(canvas.width * 0.46), y: Math.round(canvas.height * 0.14), w: Math.round(canvas.width * 0.26), h: Math.round(canvas.width * 0.26 * 2 / 3) },
+      { x: Math.round(canvas.width * 0.46), y: Math.round(canvas.height * 0.48), w: Math.round(canvas.width * 0.26), h: Math.round(canvas.width * 0.26 * 2 / 3) },
+      { x: Math.round(canvas.width * 0.76), y: Math.round(canvas.height * 0.14), w: Math.round(canvas.width * 0.20), h: Math.round(canvas.width * 0.20 * 2 / 3) },
+      { x: Math.round(canvas.width * 0.76), y: Math.round(canvas.height * 0.46), w: Math.round(canvas.width * 0.20), h: Math.round(canvas.width * 0.20 * 2 / 3) },
+    ];
+  }
+  return [{
+    x: Math.round(canvas.width * 0.1),
+    y: Math.round(canvas.height * 0.1),
+    w: Math.round(canvas.width * 0.8),
+    h: Math.round(canvas.height * 0.28),
+  }];
+}
+
+function loadPackageTestImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function normalizeFrameSlot(slot, canvas) {
+  const minSize = Math.max(40, Math.round(Math.min(canvas.width, canvas.height) * 0.04));
+  const next = {
+    x: Number(slot.x || 0),
+    y: Number(slot.y || 0),
+    w: Number(slot.w || minSize),
+    h: Number(slot.h || minSize),
+    rotation: Number(slot.rotation || 0),
+  };
+  next.w = Math.round(frameClamp(next.w, minSize, Math.max(minSize, canvas.width * 1.5)));
+  next.h = Math.round(frameClamp(next.h, minSize, Math.max(minSize, canvas.height * 1.5)));
+  const visibleW = Math.max(24, Math.round(next.w * 0.15));
+  const visibleH = Math.max(24, Math.round(next.h * 0.15));
+  next.x = Math.round(frameClamp(next.x, -next.w + visibleW, canvas.width - visibleW));
+  next.y = Math.round(frameClamp(next.y, -next.h + visibleH, canvas.height - visibleH));
+  next.rotation = Number.isFinite(next.rotation) ? next.rotation : 0;
+  return next;
+}
+
+let frameTestState = null;
+
+async function testPackageFrame(packageId, frameId) {
+  const pack = packages[packageId];
+  const frame = getPackageFrameCatalog(pack || {}).find((item) => item.id === frameId);
+  const canvas = document.querySelector("#frameTestCanvas");
+  const modal = document.querySelector("#frameTestModal");
+  if (!frame || !canvas || !modal) return;
+
+  const frameImage = await loadPackageTestImage(frameAssetSrc(frame.src));
+  canvas.width = frameImage.naturalWidth || frameImage.width;
+  canvas.height = frameImage.naturalHeight || frameImage.height;
+  const savedSlots = Array.isArray(frame.slots) && frame.slots.length
+    ? frame.slots.map((slot) => ({
+        x: Math.round(Number.isFinite(Number(slot.rx)) ? Number(slot.rx) * canvas.width : slot.x * canvas.width / Number(frame.slotCanvasWidth || 1200)),
+        y: Math.round(Number.isFinite(Number(slot.ry)) ? Number(slot.ry) * canvas.height : slot.y * canvas.height / Number(frame.slotCanvasHeight || 1800)),
+        w: Math.round(Number.isFinite(Number(slot.rw)) ? Number(slot.rw) * canvas.width : slot.w * canvas.width / Number(frame.slotCanvasWidth || 1200)),
+        h: Math.round(Number.isFinite(Number(slot.rh)) ? Number(slot.rh) * canvas.height : slot.h * canvas.height / Number(frame.slotCanvasHeight || 1800)),
+        rotation: Number(slot.rotation || 0),
+      }))
+    : null;
+  const builtInSlots = ["frame1", "frame2"].includes(frame.id)
+    ? packageFrameSlots(frame).map((slot) => ({
+        x: Math.round(slot.x * canvas.width / 1200),
+        y: Math.round(slot.y * canvas.height / 1800),
+        w: Math.round(slot.w * canvas.width / 1200),
+        h: Math.round(slot.h * canvas.height / 1800),
+        rotation: Number(slot.rotation || 0),
+      }))
+    : null;
+  const slots = (savedSlots
+    ? savedSlots
+    : builtInSlots || defaultCustomFrameSlots(canvas)).map((slot) => normalizeFrameSlot(slot, canvas));
+  frameTestState = { packageId, frameId, frame, slots, frameImage, selected: 0, drag: null };
+  renderFrameTestEditor();
+  document.querySelector("#frameTestTitle").textContent = `Tạo slot: ${frame.name}`;
+  modal.hidden = false;
+}
+
+function renderFrameTestEditor() {
+  if (!frameTestState) return;
+  const canvas = document.querySelector("#frameTestCanvas");
+  const ctx = canvas.getContext("2d");
+  const { slots, frameImage, selected } = frameTestState;
+
+  ctx.fillStyle = "#17120f";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalAlpha = 0.78;
+  ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "rgba(0,0,0,.34)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const markerSize = Math.max(24, Math.round(Math.min(canvas.width, canvas.height) * 0.025));
+  slots.forEach((slot, index) => {
+    const color = frameSlotColors[index % frameSlotColors.length];
+    ctx.save();
+    transformFrameSlot(ctx, slot);
+    ctx.globalAlpha = 0.88;
+    ctx.fillStyle = color;
+    ctx.fillRect(-slot.w / 2, -slot.h / 2, slot.w, slot.h);
+    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-slot.w / 2, -slot.h / 2, slot.w, slot.h);
+    ctx.clip();
+    ctx.strokeStyle = "rgba(255,255,255,.36)";
+    ctx.lineWidth = Math.max(4, Math.round(markerSize * 0.18));
+    for (let line = -slot.w / 2 - slot.h; line < slot.w / 2 + slot.h; line += markerSize) {
+      ctx.beginPath();
+      ctx.moveTo(line, slot.h / 2);
+      ctx.lineTo(line + slot.h, -slot.h / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `900 ${Math.max(32, Math.round(Math.min(slot.w, slot.h) * 0.34))}px Inter, Arial`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(index + 1), 0, 0);
+    ctx.font = `800 ${Math.max(13, Math.round(markerSize * 0.42))}px Inter, Arial`;
+    ctx.globalAlpha = 0;
+    ctx.fillText("ẢNH GỐC 3:2", slot.x + slot.w / 2, slot.y + slot.h / 2 + Math.max(28, markerSize * 0.9));
+    ctx.restore();
+  });
+
+  slots.forEach((slot, index) => {
+    ctx.save();
+    transformFrameSlot(ctx, slot);
+    const color = frameSlotColors[index % frameSlotColors.length];
+    ctx.lineWidth = index === selected ? 8 : 5;
+    ctx.strokeStyle = "#ffffff";
+    ctx.strokeRect(-slot.w / 2, -slot.h / 2, slot.w, slot.h);
+    ctx.lineWidth = index === selected ? 4 : 2;
+    ctx.strokeStyle = index === selected ? "#151719" : color;
+    ctx.strokeRect(-slot.w / 2, -slot.h / 2, slot.w, slot.h);
+    ctx.fillStyle = index === selected ? "#ff2f64" : "rgba(0,0,0,.65)";
+    const labelWidth = Math.max(markerSize * 3.7, Math.round(slot.w * 0.34));
+    ctx.fillRect(-slot.w / 2, -slot.h / 2 - markerSize, labelWidth, markerSize);
+    ctx.fillStyle = "#fff";
+    ctx.font = `bold ${Math.round(markerSize * 0.42)}px Inter, Arial`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`Slot ${index + 1}`, -slot.w / 2 + markerSize * 0.28, -slot.h / 2 - markerSize / 2);
+    if (index === selected) {
+      ctx.fillStyle = "#ff2f64";
+      ctx.fillRect(slot.w / 2 - markerSize, slot.h / 2 - markerSize, markerSize, markerSize);
+      ctx.fillStyle = "#fff";
+      ctx.font = `bold ${Math.round(markerSize * 0.58)}px Inter, Arial`;
+      ctx.textAlign = "center";
+      ctx.globalAlpha = 0;
+      ctx.fillText("↘", slot.x + slot.w - markerSize / 2, slot.y + slot.h - markerSize * 0.34);
+    }
+    ctx.restore();
+  });
+  drawFrameRotateButton(ctx, slots[selected], canvas);
+  syncFrameSlotControls();
+}
+
+function frameSlotCenter(slot) {
+  return { x: slot.x + slot.w / 2, y: slot.y + slot.h / 2 };
+}
+
+function transformFrameSlot(ctx, slot) {
+  const center = frameSlotCenter(slot);
+  ctx.translate(center.x, center.y);
+  ctx.rotate(Number(slot.rotation || 0));
+}
+
+function rotatePointAroundSlot(slot, localX, localY) {
+  const center = frameSlotCenter(slot);
+  const rotation = Number(slot.rotation || 0);
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  return {
+    x: center.x + localX * cos - localY * sin,
+    y: center.y + localX * sin + localY * cos,
+  };
+}
+
+function frameRotateButtonRect(slot, canvas) {
+  const size = Math.max(42, Math.round(Math.min(canvas.width, canvas.height) * 0.045));
+  const gap = Math.max(10, Math.round(size * 0.28));
+  const button = rotatePointAroundSlot(slot, 0, slot.h / 2 + gap + size / 2);
+  return { x: button.x - size / 2, y: button.y - size / 2, size };
+}
+
+function drawFrameRotateButton(ctx, slot, canvas) {
+  if (!slot) return;
+  const { x, y, size } = frameRotateButtonRect(slot, canvas);
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  ctx.save();
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#d8cbb8";
+  ctx.lineWidth = Math.max(2, Math.round(size * 0.05));
+  ctx.beginPath();
+  ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = "#191714";
+  ctx.lineWidth = Math.max(3, Math.round(size * 0.07));
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.22, -Math.PI * 0.95, Math.PI * 0.5);
+  ctx.stroke();
+  ctx.fillStyle = "#191714";
+  ctx.font = `900 ${Math.round(size * 0.34)}px Inter, Arial`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("R", cx, cy);
+  ctx.restore();
+}
+
+function syncFrameSlotControls() {
+  if (!frameTestState) return;
+  const slot = frameTestState.slots[frameTestState.selected];
+  document.querySelector("#frameSlotLabel").textContent = `Slot ${frameTestState.selected + 1}/${frameTestState.slots.length}`;
+  ["X", "Y", "W", "H"].forEach((key) => {
+    const input = document.querySelector(`#frameSlot${key}`);
+    if (input) input.value = Math.round(slot[key.toLowerCase()]);
+  });
+  const list = document.querySelector("#frameLayerList");
+  if (list) {
+    list.innerHTML = `
+      <button class="frame-layer-row is-frame" type="button" disabled>
+        <span>Trên cùng</span><strong>Frame PNG</strong><em>Khóa</em>
+      </button>
+      ${frameTestState.slots.map((_, index) => `
+        <button class="frame-layer-row ${index === frameTestState.selected ? "is-selected" : ""}" data-frame-layer="${index}" type="button">
+          <span>${index + 1}</span><strong>Slot ảnh ${index + 1}</strong><em>Dưới frame</em>
+        </button>
+      `).join("")}
+    `;
+    list.querySelectorAll("[data-frame-layer]").forEach((button) => {
+      button.addEventListener("click", () => selectFrameSlot(Number(button.dataset.frameLayer)));
+    });
+  }
+}
+
+function updateSelectedFrameSlot(patch) {
+  if (!frameTestState) return;
+  const canvas = document.querySelector("#frameTestCanvas");
+  const slot = frameTestState.slots[frameTestState.selected];
+  Object.assign(slot, patch);
+  const normalized = normalizeFrameSlot(slot, canvas);
+  Object.assign(slot, normalized);
+  renderFrameTestEditor();
+}
+
+function selectFrameSlot(index) {
+  if (!frameTestState) return;
+  frameTestState.selected = frameClamp(index, 0, frameTestState.slots.length - 1);
+  renderFrameTestEditor();
+}
+
+function swapFrameSlot(direction) {
+  if (!frameTestState) return;
+  const from = frameTestState.selected;
+  const to = from + direction;
+  if (to < 0 || to >= frameTestState.slots.length) return;
+  [frameTestState.slots[from], frameTestState.slots[to]] = [frameTestState.slots[to], frameTestState.slots[from]];
+  frameTestState.selected = to;
+  renderFrameTestEditor();
+}
+
+function addFrameSlot() {
+  if (!frameTestState) return;
+  const canvas = document.querySelector("#frameTestCanvas");
+  const base = frameTestState.slots[frameTestState.selected] || {
+    x: Math.round(canvas.width * 0.1), y: Math.round(canvas.height * 0.1),
+    w: Math.round(canvas.width * 0.8), h: Math.round(canvas.height * 0.28),
+  };
+  const offset = Math.max(12, Math.round(Math.min(canvas.width, canvas.height) * 0.02));
+  const next = {
+    x: Math.min(base.x + offset, canvas.width - base.w),
+    y: Math.min(base.y + offset, canvas.height - base.h),
+    w: base.w,
+    h: base.h,
+    rotation: Number(base.rotation || 0),
+  };
+  Object.assign(next, normalizeFrameSlot(next, canvas));
+  frameTestState.slots.splice(frameTestState.selected + 1, 0, next);
+  frameTestState.selected += 1;
+  renderFrameTestEditor();
+}
+
+function deleteFrameSlot() {
+  if (!frameTestState || frameTestState.slots.length <= 1) return;
+  frameTestState.slots.splice(frameTestState.selected, 1);
+  frameTestState.selected = Math.min(frameTestState.selected, frameTestState.slots.length - 1);
+  renderFrameTestEditor();
+}
+
+function rotateFrameSlot() {
+  if (!frameTestState) return;
+  const canvas = document.querySelector("#frameTestCanvas");
+  const slot = frameTestState.slots[frameTestState.selected];
+  const centerX = slot.x + slot.w / 2;
+  const centerY = slot.y + slot.h / 2;
+  const next = {
+    x: centerX - slot.h / 2,
+    y: centerY - slot.w / 2,
+    w: slot.h,
+    h: slot.w,
+  };
+  Object.assign(slot, normalizeFrameSlot(next, canvas));
+  renderFrameTestEditor();
+}
+
+function saveFrameSlots() {
+  if (!frameTestState) return;
+  const pack = packages[frameTestState.packageId];
+  if (!pack) return;
+  const canvas = document.querySelector("#frameTestCanvas");
+  const slots = frameTestState.slots.map((slot) => ({
+    x: Math.round(slot.x),
+    y: Math.round(slot.y),
+    w: Math.round(slot.w),
+    h: Math.round(slot.h),
+    rx: slot.x / canvas.width,
+    ry: slot.y / canvas.height,
+    rw: slot.w / canvas.width,
+    rh: slot.h / canvas.height,
+    rotation: Number(slot.rotation || 0),
+  }));
+  Object.values(packages).forEach((targetPack) => {
+    targetPack.frameCatalog = getPackageFrameCatalog(targetPack).map((frame) => (
+      frame.id === frameTestState.frameId
+        ? { ...frame, slots, slotCanvasWidth: canvas.width, slotCanvasHeight: canvas.height, maxPhotos: slots.length }
+        : frame
+    ));
+    if (targetPack.defaultFrameId === frameTestState.frameId || (targetPack.allowedFrames || []).includes(frameTestState.frameId)) {
+      targetPack.frameSlots = slots.length;
+    }
+  });
+  state.sessions.forEach((session) => {
+    session.availableFrames = (session.availableFrames || []).map((frame) => (
+      frame.id === frameTestState.frameId
+        ? { ...frame, slots, slotCanvasWidth: canvas.width, slotCanvasHeight: canvas.height, maxPhotos: slots.length }
+        : frame
+    ));
+    if ((session.allowedFrames || []).includes(frameTestState.frameId)) session.frameSlots = slots.length;
+  });
+  savePackageSettings();
+  showToast(`Đã lưu ${slots.length} slot cho frame.`);
+  renderFrameManager();
+  renderPackageSettings();
+}
+
+function frameTestPoint(event) {
+  const canvas = document.querySelector("#frameTestCanvas");
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - rect.left) * canvas.width / rect.width,
+    y: (event.clientY - rect.top) * canvas.height / rect.height,
+  };
+}
+
+function hitFrameSlot(point) {
+  if (!frameTestState) return -1;
+  for (let index = frameTestState.slots.length - 1; index >= 0; index -= 1) {
+    const slot = frameTestState.slots[index];
+    const local = frameSlotLocalPoint(point, slot);
+    if (local.x >= -slot.w / 2 && local.x <= slot.w / 2 && local.y >= -slot.h / 2 && local.y <= slot.h / 2) return index;
+  }
+  return -1;
+}
+
+function frameSlotLocalPoint(point, slot) {
+  const center = frameSlotCenter(slot);
+  const rotation = -Number(slot.rotation || 0);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  return {
+    x: dx * cos - dy * sin,
+    y: dx * sin + dy * cos,
+  };
+}
+
+function hitFrameRotateButton(point, canvas) {
+  if (!frameTestState) return false;
+  const slot = frameTestState.slots[frameTestState.selected];
+  if (!slot) return false;
+  const { x, y, size } = frameRotateButtonRect(slot, canvas);
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  return Math.hypot(point.x - cx, point.y - cy) <= size / 2;
+}
+
+function startFrameSlotDrag(event) {
+  if (!frameTestState) return;
+  const point = frameTestPoint(event);
+  if (hitFrameRotateButton(point, event.currentTarget)) {
+    const slot = frameTestState.slots[frameTestState.selected];
+    const center = frameSlotCenter(slot);
+    frameTestState.drag = {
+      mode: "rotate",
+      center,
+      startAngle: Math.atan2(point.y - center.y, point.x - center.x),
+      startRotation: Number(slot.rotation || 0),
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    return;
+  }
+  const index = hitFrameSlot(point);
+  if (index < 0) return;
+  frameTestState.selected = index;
+  const slot = frameTestState.slots[index];
+  const handle = Math.max(20, Math.round(Math.min(event.currentTarget.width, event.currentTarget.height) * 0.025));
+  const local = frameSlotLocalPoint(point, slot);
+  const resize = local.x >= slot.w / 2 - handle && local.y >= slot.h / 2 - handle;
+  frameTestState.drag = { mode: resize ? "resize" : "move", x: point.x, y: point.y, slot: { ...slot } };
+  event.currentTarget.setPointerCapture(event.pointerId);
+  renderFrameTestEditor();
+}
+
+function moveFrameSlotDrag(event) {
+  if (!frameTestState?.drag) return;
+  const point = frameTestPoint(event);
+  const drag = frameTestState.drag;
+  const dx = point.x - drag.x;
+  const dy = point.y - drag.y;
+  if (drag.mode === "rotate") {
+    const angle = Math.atan2(point.y - drag.center.y, point.x - drag.center.x);
+    updateSelectedFrameSlot({ rotation: drag.startRotation + angle - drag.startAngle });
+  } else if (drag.mode === "resize") {
+    const rotation = -Number(drag.slot.rotation || 0);
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const localDx = dx * cos - dy * sin;
+    const localDy = dx * sin + dy * cos;
+    updateSelectedFrameSlot({ w: drag.slot.w + localDx, h: drag.slot.h + localDy });
+  } else {
+    updateSelectedFrameSlot({ x: drag.slot.x + dx, y: drag.slot.y + dy });
+  }
+}
+
+function stopFrameSlotDrag(event) {
+  if (!frameTestState?.drag) return;
+  frameTestState.drag = null;
+  try { event.currentTarget.releasePointerCapture(event.pointerId); } catch {}
+}
+
+function closeFrameTestModal() {
+  const modal = document.querySelector("#frameTestModal");
+  if (modal) modal.hidden = true;
+  frameTestState = null;
 }
 
 let autoFilterSetting = loadAutoFilterSetting();
@@ -348,7 +1069,8 @@ async function loadServerState() {
       if (state.packageSettings && typeof state.packageSettings === "object") {
         localStorage.setItem(PACKAGE_SETTINGS_KEY, JSON.stringify(state.packageSettings));
         Object.entries(state.packageSettings).forEach(([id, patch]) => {
-          if (packages[id]) packages[id] = { ...packages[id], ...patch, id };
+          if (!packages[id]) packages[id] = { id, name: patch.name || `Goi ${Number(patch.minutes || 3)} phut`, minutes: Number(patch.minutes || 3), price: Number(patch.price || 0), printCount: 1, frameSlots: 4, defaultFrameId: null, allowedFrames: [], printFrameIds: [], frameCatalog: [] };
+          packages[id] = { ...packages[id], ...patch, id };
         });
       }
       if (state.autoFilterSetting?.filterKey) {
@@ -395,7 +1117,28 @@ function showToast(message) {
 
 function packageLabel(session) {
   const pack = packages[session.packageId] || packages["3"];
-  return `${pack.name} - ${money.format(pack.price)}d - In ${session.printCount || pack.printCount || 1} tam`;
+  const minutes = Number(session.packageMinutes || pack.minutes || String(session.packageId || "").match(/\d+/)?.[0] || 3);
+  const price = Number(session.packagePrice ?? pack.price ?? 0);
+  const birthday = session.birthdayBonusMinutes ? " + SN" : "";
+  return `Gói ${minutes} phút${birthday} - ${money.format(price)}đ - In ${session.printCount || pack.printCount || 1} tấm`;
+}
+
+function elapsedSince(value) {
+  if (!value) return "-";
+  const start = Date.parse(value);
+  if (!Number.isFinite(start) || start <= 0) return "-";
+  const total = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  if (total > 12 * 60 * 60) return "-";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return hours ? `${hours}h ${String(minutes).padStart(2, "0")}p` : `${minutes}p ${String(seconds).padStart(2, "0")}s`;
+}
+
+function displayName(value) {
+  return String(value || "-")
+    .replace(/Nguy\?n/g, "Nguyễn")
+    .replace(/Minh Anh/g, "Minh Anh");
 }
 
 function queuePosition(sessionId) {
@@ -507,11 +1250,26 @@ function rejoinQueue(session) {
 }
 
 function confirmCashPayment(session) {
+  const birthdayToggle = document.querySelector(`[data-birthday-toggle="${CSS.escape(session.id)}"]`);
+  const birthdayDateInput = document.querySelector(`[data-birthday-date="${CSS.escape(session.id)}"]`);
+  const birthdayDate = birthdayDateInput?.value || "";
+  const hasBirthdayBonus = Boolean(birthdayToggle?.checked);
+  if (hasBirthdayBonus && !birthdayDate) {
+    showToast("Vui lòng chọn ngày sinh nhật trước khi xác nhận thanh toán.");
+    birthdayDateInput?.focus();
+    return;
+  }
+  const baseMinutes = Number(packages[session.packageId]?.minutes || String(session.packageId || "").match(/\d+/)?.[0] || session.packageMinutes || 3);
   session.packagePrice = Number(session.packagePrice ?? packages[session.packageId]?.price ?? 0);
+  session.isBirthday = hasBirthdayBonus;
+  session.birthdayDate = hasBirthdayBonus ? birthdayDate : "";
+  session.birthdayBonusMinutes = hasBirthdayBonus ? 5 : 0;
+  session.packageMinutes = baseMinutes + session.birthdayBonusMinutes;
   session.paymentStatus = "PAID";
   session.status = "WAITING";
   session.paidAt = new Date().toISOString();
   session.updatedAt = session.paidAt;
+  birthdayDrafts.delete(session.id);
   saveState();
   render();
   showToast(`Đã xác nhận tiền mặt cho ${session.ticket}.`);
@@ -524,8 +1282,9 @@ function startShooting(session) {
   }
 
   const pack = packages[session.packageId] || packages["3"];
+  const minutes = Math.max(1, Number(session.packageMinutes || pack.minutes || session.packageId || 3));
   session.status = "READY_TO_SHOOT";
-  session.remainingSeconds = pack.minutes * 60;
+  session.remainingSeconds = minutes * 60;
   session.endsAt = null;
   session.rawCount = session.rawCount || 0;
   session.preparedAt = new Date().toISOString();
@@ -732,6 +1491,41 @@ function completeRetouch(session) {
   render();
 }
 
+async function importRetouchFolder(session) {
+  const input = document.querySelector(`[data-retouch-folder="${session.id}"]`);
+  const folderPath = input?.value.trim();
+  if (!folderPath) {
+    showToast("Nhập đường dẫn folder MagiMir export trước.");
+    return;
+  }
+
+  importingRetouchSessionId = session.id;
+  renderRetouch();
+  try {
+    const response = await fetch("/api/retouch/import-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: session.id, folderPath }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showToast(payload.error || "Không gửi được ảnh đã chỉnh.");
+      return;
+    }
+    const index = state.sessions.findIndex((item) => item.id === session.id);
+    if (index >= 0 && payload.session) state.sessions[index] = payload.session;
+    retouchFolderDrafts.delete(session.id);
+    await loadServerState();
+    render();
+    showToast(`Đã gửi ${payload.count || 0} ảnh MagiMir cho khách.`);
+  } catch {
+    showToast("Mất kết nối server. Chưa gửi được ảnh đã chỉnh.");
+  } finally {
+    importingRetouchSessionId = "";
+    renderRetouch();
+  }
+}
+
 function markPrinted(session) {
   session.status = "COMPLETED";
   session.printedAt = new Date().toISOString();
@@ -759,10 +1553,30 @@ function completeSession(session) {
   render();
 }
 
+function refundSession(session) {
+  if (session.paymentStatus === "REFUNDED") {
+    showToast("Phiên này đã hoàn tiền rồi.");
+    return;
+  }
+  if (!confirm(`Xác nhận hoàn tiền phiên ${codeLabel(session)}?`)) return;
+  const reason = prompt("Lý do hoàn tiền", session.refundReason || "") || "";
+  const now = new Date().toISOString();
+  session.paymentStatus = "REFUNDED";
+  session.status = "REFUNDED";
+  session.refundedAt = now;
+  session.refundReason = reason.trim();
+  session.updatedAt = now;
+  saveState();
+  render();
+  showToast("Đã đánh dấu hoàn tiền. Phiên này không còn tính doanh thu.");
+}
+
 function createDemoSession() {
   const number = state.nextNumber++;
   const id = `GL-${String(number).padStart(4, "0")}`;
   const pack = packages["5"];
+  const allowedFrames = Array.isArray(pack.allowedFrames) && pack.allowedFrames.length ? pack.allowedFrames : ["frame1", "frame2"];
+  const defaultFrameId = allowedFrames.includes(pack.defaultFrameId) ? pack.defaultFrameId : allowedFrames[0];
   state.sessions.push({
     id,
     isDemo: true,
@@ -774,10 +1588,11 @@ function createDemoSession() {
     status: "WAITING",
     paymentStatus: "PAID",
     frameSlots: pack.frameSlots || 4,
-    defaultFrameId: pack.defaultFrameId || null,
-    allowedFrames: pack.allowedFrames || ["frame1", "frame2"],
-    availableFrames: getPackageFrameCatalog(pack).filter((frame) => (pack.allowedFrames || ["frame1", "frame2"]).includes(frame.id)),
-    printCount: pack.printCount || 1,
+    defaultFrameId,
+    allowedFrames,
+    printFrameIds: [],
+    availableFrames: getPackageFrameCatalog(pack).filter((frame) => allowedFrames.includes(frame.id)),
+    printCount: Math.max(1, Number(pack.printCount || 1)),
     finalJobs: [],
     rawCount: 0,
     rawPhotos: [],
@@ -807,6 +1622,11 @@ function formatDateTime(value) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("vi-VN", { hour12: false });
 }
 
+function formatShortTime(value) {
+  const date = new Date(value || Date.now());
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 function paymentMethodLabel(session) {
   return ["cash", "CASH"].includes(session.paymentMethod) ? "Tiền mặt" : ["bank", "BANK_TRANSFER"].includes(session.paymentMethod) ? "Chuyển khoản" : (session.paymentMethod || "-");
 }
@@ -819,11 +1639,20 @@ function frameLabel(session) {
 }
 
 function codeLabel(session) {
-  return `${session.ticket || "-"} / ${session.id}`;
+  const raw = String(session.ticket || session.paymentCode || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (digits) return digits.slice(-4).padStart(4, "0");
+  return String(session.id || "-").trim();
 }
 
 function isPaymentQueue(session) {
   return ["PAYMENT_PENDING", "PAYMENT_CASH_PENDING", "CHECKED_IN"].includes(session.status) || session.paymentStatus === "CASH_PENDING";
+}
+
+function staffMoreActions(session) {
+  return session.paymentStatus === "REFUNDED"
+    ? `<span class="customer-note">Đã hoàn tiền</span>`
+    : `<button class="danger-btn refund-action-btn" data-action="refund" data-id="${session.id}" type="button">Hoàn tiền</button>`;
 }
 
 function isShootQueue(session) {
@@ -851,7 +1680,7 @@ function card(session, body, actions = "") {
     <article class="session-card-row">
       <div>
         <strong>${session.ticket} · ${session.id}</strong>
-        <span>${session.customerName} · ${packageLabel(session)}</span>
+        <span>${displayName(session.customerName)} · ${packageLabel(session)}</span>
         <small>${statusLabels[session.status] || session.status} · Raw ${session.rawCount || 0} ảnh</small>
       </div>
       <div class="row-actions">${actions}</div>
@@ -869,19 +1698,36 @@ function staffCompactRow(session, cells, actions = "", extraClass = "") {
   `;
 }
 
+function birthdayDraft(session) {
+  return birthdayDrafts.get(session.id) || {
+    checked: Boolean(session.isBirthday),
+    date: session.birthdayDate || "",
+  };
+}
+
+function updateBirthdayDraft(input) {
+  const id = input.dataset.birthdayToggle || input.dataset.birthdayDate;
+  if (!id) return;
+  const current = birthdayDrafts.get(id) || { checked: false, date: "" };
+  if (input.dataset.birthdayToggle) current.checked = input.checked;
+  if (input.dataset.birthdayDate) current.date = input.value;
+  birthdayDrafts.set(id, current);
+}
+
 function renderQueue() {
   const queue = state.sessions.filter(isPaymentQueue);
   document.querySelector("#queueList").innerHTML = queue.length
-    ? queue.map((session, index) => staffCompactRow(session, [
+    ? queue.map((session, index) => {
+      const birthday = birthdayDraft(session);
+      return staffCompactRow(session, [
         { label: "STT", value: index + 1, className: "queue-order" },
-        { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
-        { label: "Gói", value: packageLabel(session) },
-        { label: "Frame", value: frameLabel(session) },
-        { label: "TT", value: paymentMethodLabel(session) },
+        { label: "Giờ", value: formatShortTime(session.createdAt), note: paymentMethodLabel(session) },
+        { label: "Số tiền", value: `${money.format(sessionRevenue(session))}đ` },
+        { label: "Sinh nhật", value: `<div class="birthday-controls"><label class="birthday-toggle"><input data-birthday-toggle="${session.id}" type="checkbox" ${birthday.checked ? "checked" : ""}> <span>+5p</span></label><input class="birthday-date-input" data-birthday-date="${session.id}" type="date" value="${birthday.date}"></div>` },
       ], `
         <button class="primary-btn" data-action="confirm-cash" data-id="${session.id}" type="button">Đã thanh toán</button>
-        <button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link</button>
-      `, "payment-row")).join("")
+      `, "payment-row");
+    }).join("")
     : '<div class="empty-state">Chưa có phiếu chờ duyệt thanh toán.</div>';
 }
 
@@ -896,10 +1742,11 @@ function renderActive() {
       ? waiting.map((session, index) => staffCompactRow(session, [
           { label: "STT", value: index + 1, className: "queue-order" },
           { label: "Mã", value: codeLabel(session) },
-          { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
+          { label: "Khách", value: displayName(session.customerName), note: session.contact || "-" },
           { label: "Gói", value: packageLabel(session) },
+          { label: "Chờ", value: elapsedSince(session.paidAt), note: "Từ lúc xác nhận" },
           { label: "Trạng thái", value: statusLabels[session.status] || session.status, note: `Raw ${session.rawCount || 0} ảnh` },
-        ], `<button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link</button>`, "shooting-row")).join("")
+        ], "", "shooting-row")).join("")
       : '<div class="empty-state">Chưa có khách chờ chụp.</div>';
   }
 
@@ -907,39 +1754,62 @@ function renderActive() {
     ? activeList.map((session) => {
       const active = ["READY_TO_SHOOT", "SHOOTING", "PAUSED"].includes(session.status);
       const controls = active ? `
-        <button class="primary-btn" data-action="start-shooting" data-id="${session.id}" type="button" ${session.status === "SHOOTING" ? "disabled" : ""}>START</button>
-        <button class="ghost-btn" data-action="pause" data-id="${session.id}" type="button" ${session.status !== "SHOOTING" ? "disabled" : ""}>PAUSE</button>
-        <button class="danger-btn" data-action="finish-shooting" data-id="${session.id}" type="button">STOP</button>
-        <button class="ghost-btn" data-action="restart-shooting" data-id="${session.id}" type="button">RESTART</button>
-        <button class="primary-btn" data-action="import-incoming" data-id="${session.id}" type="button">Gom ${incomingFiles.length}</button>
+        ${staffMoreActions(session)}
       ` : "";
       return staffCompactRow(session, [
-        { label: "Còn lại", value: formatTime(session.remainingSeconds || 0), className: "timer-cell" },
-        { label: "Mã", value: codeLabel(session) },
-        { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
-        { label: "Gói", value: packageLabel(session) },
-        { label: "Trạng thái", value: statusLabels[session.status] || session.status, note: `Raw ${session.rawCount || 0} ảnh` },
-      ], `${controls}<button class="ghost-btn" data-action="customer-link" data-id="${session.id}" type="button">Link</button>`, `shooting-row ${active ? "is-active" : ""}`);
+        { label: "Session", value: codeLabel(session), note: session.id },
+        { label: "Ảnh đã chụp", value: `${session.rawCount || session.rawPhotos?.length || 0} ảnh` },
+      ], controls, `shooting-row active-shooting-row ${active ? "is-active" : ""}`);
     }).join("")
     : `<div class="empty-state">Chưa có phiên đang chụp. Folder digiCamControl hiện có ${incomingFiles.length} ảnh.</div>`;
 }
 function renderRetouch() {
+  const target = document.querySelector("#retouchList");
+  if (!target) return;
+  const activeInput = document.activeElement?.matches?.("[data-retouch-folder]")
+    ? { id: document.activeElement.dataset.retouchFolder, start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd }
+    : null;
   const list = state.sessions.filter((session) => ["RETOUCH_REQUESTED", "RETOUCH_IN_PROGRESS"].includes(session.status));
-  document.querySelector("#retouchList").innerHTML = list.length
-    ? list
-        .map((session) =>
-          card(
-            session,
-            `Ảnh cần chỉnh: ${session.retouchCount || 0} · Mức: ${session.retouchLevel || "Tự nhiên"} · ${session.retouchNote || "Không có ghi chú"}`,
-            session.status === "RETOUCH_REQUESTED"
-              ? `<button class="primary-btn" data-action="start-retouch" data-id="${session.id}" type="button">Bắt đầu chỉnh sửa tự động</button>`
-              : `<button class="primary-btn" data-action="complete-retouch" data-id="${session.id}" type="button">Đánh dấu đã chỉnh xong</button>`
-          )
-        )
-        .join("")
-    : '<div class="empty-state">Chưa có yêu cầu chỉnh sửa tự động.</div>';
+  target.innerHTML = list.length
+    ? list.map((session, index) => {
+      const action = session.status === "RETOUCH_REQUESTED"
+        ? `<button class="primary-btn" data-action="start-retouch" data-id="${session.id}" type="button">Đưa folder vào MagiMir</button>`
+        : `<div class="folder-import-row">
+            <input class="folder-input" data-retouch-folder="${session.id}" type="text" placeholder="D:\\MagiMir\\Export\\${session.id}">
+            <button class="primary-btn" data-action="import-retouch-folder" data-id="${session.id}" type="button" ${importingRetouchSessionId === session.id ? "disabled" : ""}>${importingRetouchSessionId === session.id ? "Đang kiểm tra thư mục..." : "Gửi ảnh đã chỉnh cho khách"}</button>
+          </div>`;
+      return staffCompactRow(session, [
+        { label: "STT", value: index + 1, className: "queue-order" },
+        { label: "Mã", value: codeLabel(session) },
+        { label: "Khách", value: displayName(session.customerName), note: session.contact || "-" },
+        { label: "Ảnh", value: `${session.retouchCount || session.rawCount || 0} ảnh`, note: session.retouchLevel || "MagiMir folder" },
+        { label: "Trạng thái", value: statusLabels[session.status] || session.status, note: session.retouchNote || "-" },
+      ], `${action}${staffMoreActions(session)}`, "retouch-row");
+    }).join("")
+    : '<div class="empty-state">Chưa có khách yêu cầu quán chỉnh ảnh.</div>';
+  target.querySelectorAll("[data-retouch-folder]").forEach((input) => {
+    input.value = retouchFolderDrafts.get(input.dataset.retouchFolder) || "";
+  });
+  if (activeInput) {
+    const input = target.querySelector(`[data-retouch-folder="${activeInput.id}"]`);
+    input?.focus();
+    input?.setSelectionRange(activeInput.start, activeInput.end);
+  }
 }
-
+function renderCompose() {
+  const target = document.querySelector("#composeList");
+  if (!target) return;
+  const list = state.sessions.filter((session) => ["RAW_READY", "RETOUCH_READY"].includes(session.status));
+  target.innerHTML = list.length
+    ? list.map((session, index) => staffCompactRow(session, [
+        { label: "STT", value: index + 1, className: "queue-order" },
+        { label: "Mã", value: codeLabel(session) },
+        { label: "Khách", value: displayName(session.customerName), note: session.contact || "-" },
+        { label: "Gói", value: packageLabel(session) },
+        { label: "Ảnh", value: `${session.rawCount || session.rawPhotos?.length || 0} ảnh`, note: statusLabels[session.status] || session.status },
+      ], `<a class="primary-btn" href="${sessionUrl(session)}" target="_blank" rel="noopener">Ghép frame</a>${staffMoreActions(session)}`, "compose-row")).join("")
+    : '<div class="empty-state">Chưa có phiên cần nhân viên ghép ảnh.</div>';
+}
 function renderAutoFilterMonitor() {
   const target = document.querySelector("#autoFilterList");
   if (!target) return;
@@ -978,15 +1848,19 @@ function renderPrint() {
     ? list.map((session, index) => {
       const jobs = Array.isArray(session.finalJobs) && session.finalJobs.length
         ? session.finalJobs
-        : [{ index: 1, fileName: session.finalFile || `${session.id}_final_01.png`, url: session.finalUrl, localPath: session.finalLocalPath, printCode: session.printCode }];
+        : [{ index: 1, fileName: session.finalFile || `${session.id}_final_01.png`, url: session.finalUrl, localPath: session.finalLocalPath, pdfUrl: session.finalPdfUrl, pdfLocalPath: session.finalPdfLocalPath, printCode: session.printCode }];
       const printCode = session.printCode || jobs.find((job) => job.printCode)?.printCode || session.ticket || session.id;
-      const links = jobs.map((job) => job.url
-        ? `<a class="ghost-btn" href="${job.url}" target="_blank" rel="noopener">File ${job.index || 1}</a>`
-        : `<span class="customer-note">${job.localPath || job.fileName || `File ${job.index || 1}`}</span>`).join("");
+      const links = jobs.map((job) => {
+        const printUrl = job.pdfUrl || job.url;
+        const printPath = job.pdfLocalPath || job.localPath || job.pdfFileName || job.fileName;
+        return printUrl
+          ? `<a class="ghost-btn" href="${printUrl}" target="_blank" rel="noopener">${job.pdfUrl ? "PDF in" : "File"} ${job.index || 1}</a>`
+          : `<span class="customer-note">${printPath || `File ${job.index || 1}`}</span>`;
+      }).join("");
       return staffCompactRow(session, [
         { label: "STT", value: index + 1, className: "queue-order" },
         { label: "Mã in", value: printCode },
-        { label: "Khách", value: session.customerName || "-", note: session.contact || "-" },
+        { label: "Khách", value: displayName(session.customerName), note: session.contact || "-" },
         { label: "Gói", value: packageLabel(session) },
         { label: "File", value: `${jobs.length}/${session.printCount || jobs.length || 1}`, note: statusLabels[session.status] || session.status },
       ], `
@@ -1005,11 +1879,12 @@ function renderDelivery() {
     ? list.map((session) => `
       <article class="staff-row done-row">
         <div><span>Ngày giờ</span><strong>${formatDateTime(session.completedAt || session.printedAt || session.updatedAt || session.createdAt)}</strong></div>
-        <div><span>Tên</span><strong>${session.customerName || "-"}</strong></div>
+        <div><span>Tên</span><strong>${displayName(session.customerName)}</strong></div>
         <div><span>SĐT</span><strong>${session.contact || "-"}</strong></div>
         <div><span>Mã</span><strong>${codeLabel(session)}</strong></div>
         <div><span>Gói</span><strong>${packageLabel(session)}</strong></div>
         <div><span>Trạng thái</span><strong>${statusLabels[session.status] || session.status}</strong></div>
+        <div class="row-actions">${staffMoreActions(session)}</div>
       </article>
     `).join("")
     : '<div class="empty-state">Chưa có phiên hoàn tất.</div>';
@@ -1019,6 +1894,12 @@ function renderStats() {
   document.querySelector("#shootingCount").textContent = state.sessions.filter(isShootWaiting).length;
   document.querySelector("#printCount").textContent = state.sessions.filter(isShootingActive).length;
   document.querySelector("#doneCount").textContent = state.sessions.filter(isPrintQueue).length;
+  const retouchCount = state.sessions.filter((session) => ["RETOUCH_REQUESTED", "RETOUCH_IN_PROGRESS"].includes(session.status)).length;
+  const retouchBadge = document.querySelector("#retouchTabBadge");
+  if (retouchBadge) {
+    retouchBadge.textContent = retouchCount;
+    retouchBadge.hidden = retouchCount === 0;
+  }
 }
 
 function sessionRevenue(session) {
@@ -1026,9 +1907,13 @@ function sessionRevenue(session) {
 }
 
 function paidSessionDate(session) {
-  const value = session.paidAt || session.createdAt;
+  const value = session.paidAt || session.completedAt || session.printedAt || session.printRequestedAt || session.finalExportedAt || session.updatedAt || session.createdAt;
   const date = new Date(value || 0);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isRevenueSession(session) {
+  return session.paymentStatus !== "REFUNDED" && (session.paymentStatus === "PAID" || isPrintQueue(session) || isDoneQueue(session));
 }
 
 function revenueStartDate(range, now = new Date()) {
@@ -1052,7 +1937,7 @@ function revenueSessions() {
   const start = revenueStartDate(revenueRange);
   const end = revenueEndDate(revenueRange);
   return state.sessions
-    .filter((session) => session.paymentStatus === "PAID")
+    .filter(isRevenueSession)
     .filter((session) => {
       const date = paidSessionDate(session);
       return date && (!start || date >= start) && (!end || date < end);
@@ -1112,7 +1997,8 @@ function renderRevenue() {
   document.querySelector("#revenueTableBody").innerHTML = sessions.map((session) => {
     const date = paidSessionDate(session);
     const method = session.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản";
-    return `<tr><td>${date.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })}</td><td><strong>${session.ticket || session.id}</strong><small>${session.id}</small></td><td>${session.customerName || "Khách hàng"}</td><td>${packages[session.packageId]?.name || `Gói ${session.packageId || "-"}`}</td><td>${method}</td><td class="money-cell"><strong>${money.format(sessionRevenue(session))}đ</strong></td></tr>`;
+    const birthday = session.isBirthday ? `<input type="checkbox" checked disabled><small>${session.birthdayDate || "+5 phút"}</small>` : `<input type="checkbox" disabled>`;
+    return `<tr><td>${date.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" })}</td><td><strong>${codeLabel(session)}</strong><small>${session.id}</small></td><td>${displayName(session.customerName || "Khách hàng")}</td><td>${birthday}</td><td>${packageLabel(session)}</td><td>${method}</td><td class="money-cell"><strong>${money.format(sessionRevenue(session))}đ</strong></td></tr>`;
   }).join("");
   document.querySelector("#revenueEmpty").hidden = sessions.length > 0;
   document.querySelector(".revenue-table-wrap").hidden = sessions.length === 0;
@@ -1143,10 +2029,11 @@ async function loginRevenue(pin) {
 }
 
 function exportRevenueCsv() {
-  const rows = [["Thời gian", "Mã lượt", "Mã phiên", "Khách hàng", "Gói", "Thanh toán", "Doanh thu"]];
+  const rows = [["Thời gian", "Mã lượt", "Mã phiên", "Khách hàng", "Sinh nhật", "Ngày sinh", "Gói", "Thanh toán", "Doanh thu"]];
   revenueSessions().forEach((session) => rows.push([
-    paidSessionDate(session).toLocaleString("vi-VN"), session.ticket || "", session.id || "", session.customerName || "",
-    packages[session.packageId]?.name || session.packageId || "", session.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản", sessionRevenue(session),
+    paidSessionDate(session).toLocaleString("vi-VN"), session.ticket || "", session.id || "", displayName(session.customerName),
+    session.isBirthday ? "Có" : "Không", session.birthdayDate || "", packages[session.packageId]?.name || session.packageId || "",
+    session.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản", sessionRevenue(session),
   ]));
   const csv = `\uFEFF${rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n")}`;
   const link = document.createElement("a");
@@ -1159,10 +2046,12 @@ function exportRevenueCsv() {
 function render() {
   renderStats();
   renderRevenue();
-  renderQueue();
+  if (!document.activeElement?.matches?.("[data-birthday-toggle], [data-birthday-date]")) renderQueue();
   renderActive();
   renderAutoFilterMonitor();
   renderRetouch();
+  renderCompose();
+  renderFrameManager();
   renderPackageSettings();
   renderPrint();
   renderDelivery();
@@ -1404,11 +2293,13 @@ function handleAction(action, session) {
   if (action === "finish-shooting") finishShooting(session);
   if (action === "restart-shooting") restartShooting(session);
   if (action === "start-retouch") updateStatus(session, "RETOUCH_IN_PROGRESS");
+  if (action === "import-retouch-folder") importRetouchFolder(session);
   if (action === "complete-retouch") completeRetouch(session);
   if (action === "printed") markPrinted(session);
   if (action === "build-zip") buildFinalZip(session);
   if (action === "complete") completeSession(session);
   if (action === "customer-link") openCustomerLinkModal(session);
+  if (action === "refund") refundSession(session);
 }
 
 function saveAutoFilterSettingFromForm() {
@@ -1430,10 +2321,30 @@ document.querySelector("#callNextBtn")?.addEventListener("click", callNext);
 document.querySelector("#seedBtn").addEventListener("click", createDemoSession);
 document.querySelector("#resetBtn").addEventListener("click", resetDemo);
 document.querySelector("#saveAutoFilterSettingBtn")?.addEventListener("click", saveAutoFilterSettingFromForm);
+document.querySelector("#addPackageBtn")?.addEventListener("click", addPackage);
 document.querySelector("#savePackageSettingsBtn")?.addEventListener("click", savePackageSettingsFromForm);
 document.querySelector("#closeCustomerLinkModalBtn")?.addEventListener("click", closeCustomerLinkModal);
 document.querySelector("#copyCustomerDirectLinkBtn")?.addEventListener("click", copyCustomerDirectLink);
 document.querySelector("#customerLinkModal")?.addEventListener("click", (event) => { if (event.target.id === "customerLinkModal") closeCustomerLinkModal(); });
+document.querySelector("#closeFrameTestModalBtn")?.addEventListener("click", closeFrameTestModal);
+document.querySelector("#frameTestModal")?.addEventListener("click", (event) => { if (event.target.id === "frameTestModal") closeFrameTestModal(); });
+document.querySelector("#frameTestCanvas")?.addEventListener("pointerdown", startFrameSlotDrag);
+document.querySelector("#frameTestCanvas")?.addEventListener("pointermove", moveFrameSlotDrag);
+document.querySelector("#frameTestCanvas")?.addEventListener("pointerup", stopFrameSlotDrag);
+document.querySelector("#frameTestCanvas")?.addEventListener("pointercancel", stopFrameSlotDrag);
+document.querySelector("#frameSlotPrevBtn")?.addEventListener("click", () => selectFrameSlot((frameTestState?.selected || 0) - 1));
+document.querySelector("#frameSlotNextBtn")?.addEventListener("click", () => selectFrameSlot((frameTestState?.selected || 0) + 1));
+document.querySelector("#frameSlotBackBtn")?.addEventListener("click", () => swapFrameSlot(-1));
+document.querySelector("#frameSlotForwardBtn")?.addEventListener("click", () => swapFrameSlot(1));
+document.querySelector("#addFrameSlotBtn")?.addEventListener("click", addFrameSlot);
+document.querySelector("#rotateFrameSlotBtn")?.addEventListener("click", rotateFrameSlot);
+document.querySelector("#deleteFrameSlotBtn")?.addEventListener("click", deleteFrameSlot);
+document.querySelector("#saveFrameSlotsBtn")?.addEventListener("click", saveFrameSlots);
+["X", "Y", "W", "H"].forEach((key) => {
+  document.querySelector(`#frameSlot${key}`)?.addEventListener("input", (event) => {
+    updateSelectedFrameSlot({ [key.toLowerCase()]: Number(event.target.value) });
+  });
+});
 document.querySelector("#toggleFilterLabBtn")?.addEventListener("click", () => {
   const frame = document.querySelector("#filterAdminFrame");
   const button = document.querySelector("#toggleFilterLabBtn");
@@ -1444,14 +2355,58 @@ document.querySelector("#toggleFilterLabBtn")?.addEventListener("click", () => {
   button.textContent = willOpen ? "An filter lab" : "Mo filter lab";
 });
 document.body.addEventListener("click", (event) => {
+  const managedFrameDelete = event.target.closest("[data-frame-manager-delete]");
+  if (managedFrameDelete) {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteManagedFrame(managedFrameDelete.dataset.frameManagerDelete);
+    return;
+  }
+  const managedFrameEdit = event.target.closest("[data-frame-manager-edit]");
+  if (managedFrameEdit) {
+    event.preventDefault();
+    event.stopPropagation();
+    const frameId = managedFrameEdit.dataset.frameManagerEdit;
+    const pack = Object.values(packages).find((item) => getPackageFrameCatalog(item).some((frame) => frame.id === frameId)) || packages["3"];
+    testPackageFrame(pack.id, frameId).catch(() => showToast("Khong test duoc frame."));
+    return;
+  }
+  const frameTest = event.target.closest("[data-frame-test]");
+  if (frameTest) {
+    event.preventDefault();
+    event.stopPropagation();
+    testPackageFrame(frameTest.dataset.packageTest, frameTest.dataset.frameTest).catch(() => showToast("Khong test duoc frame."));
+    return;
+  }
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const session = state.sessions.find((item) => item.id === button.dataset.id);
   handleAction(button.dataset.action, session);
 });
 document.body.addEventListener("change", (event) => {
-  const input = event.target.closest("[data-package-frame-upload]");
-  if (input) uploadPackageFrame(input);
+  const birthdayControl = event.target.closest("[data-birthday-toggle], [data-birthday-date]");
+  if (birthdayControl) {
+    updateBirthdayDraft(birthdayControl);
+    return;
+  }
+  const packageField = event.target.closest("[data-package-field]");
+  if (packageField) {
+    updatePackageField(packageField);
+    savePackageSettings();
+    renderPackageSettings();
+    return;
+  }
+  const managedUpload = event.target.closest("#managedFrameUpload");
+  if (managedUpload) {
+    uploadManagedFrame(managedUpload);
+    return;
+  }
+  const packageFrame = event.target.closest("[data-package-frame]");
+  if (packageFrame) {
+    const card = packageFrame.closest("[data-package-id]");
+    toggleFramePackage(packageFrame.dataset.packageFrame, card?.dataset.packageId, packageFrame.checked);
+    return;
+  }
   const defaultFrame = event.target.closest("[data-package-default-frame]");
   if (defaultFrame?.checked) {
     const card = defaultFrame.closest("[data-package-id]");
@@ -1463,9 +2418,17 @@ document.body.addEventListener("change", (event) => {
     if (optional) optional.checked = false;
   }
 });
+document.body.addEventListener("input", (event) => {
+  const retouchFolder = event.target.closest("[data-retouch-folder]");
+  if (retouchFolder) retouchFolderDrafts.set(retouchFolder.dataset.retouchFolder, retouchFolder.value);
+  const birthdayControl = event.target.closest("[data-birthday-date]");
+  if (birthdayControl) updateBirthdayDraft(birthdayControl);
+  const packageField = event.target.closest("[data-package-field]");
+  if (packageField) updatePackageField(packageField);
+});
 
 function setDashboardView(view) {
-  const activeView = ["operations", "done", "revenue", "management"].includes(view) ? view : "operations";
+  const activeView = ["operations", "retouch", "compose", "done", "revenue", "frames", "management"].includes(view) ? view : "operations";
   document.body.dataset.dashboardView = activeView;
   localStorage.setItem(DASHBOARD_VIEW_KEY, activeView);
   document.querySelectorAll("[data-dashboard-view]").forEach((section) => {

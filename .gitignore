@@ -15,8 +15,24 @@ dataset/
 
 # Dependency/cache folders
 node_modules/
+**/.venv/
 tools/**/node_modules/
 vendor_py/
+
+# Generated distributable builds
+_self_contained_build/
+
+# Local research/third-party source checkouts (not used by the kiosk runtime)
+ColorTransferLib/
+vendor/fujilab/
+vendor/mini-gl/
+vendor/mini-photo-editor/
+vendor/powershot-threejs/
+vendor/simple-makeup-filter/
+beauty-test.html
+beauty-test.js
+mini-gl-test.html
+mini-gl-test.js
 
 # Logs
 *.log

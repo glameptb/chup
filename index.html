@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=20260706-revenue3" />
+    <link rel="stylesheet" href="styles.css?v=20260820-birthday-compact" />
   </head>
   <body>
     <div class="shell">
@@ -20,11 +20,12 @@
           </div>
         </div>
         <nav class="side-nav">
-          <a href="#queue">Hang cho</a>
-          <a href="#shooting">Dang chup</a>
-          <a href="#retouch">Chinh sua tu dong</a>
+          <a href="#queue">Hàng chờ</a>
+          <a href="#shooting">Đang chụp</a>
+          <a href="#retouch">Gửi ảnh MagiMir</a>
           <a href="#print">Cho in</a>
           <a href="#delivery">Hoàn tất</a>
+          <a href="#frames">Frame</a>
           <a href="#packages">Goi chup</a>
           <a href="#revenue">Doanh thu</a>
           <a href="#filter-lab">Quản lý filter</a>
@@ -50,10 +51,13 @@
           </div>
         </header>
 
-                <div class="dashboard-tabs" role="tablist" aria-label="Khu vực dashboard">
+                        <div class="dashboard-tabs" role="tablist" aria-label="Khu vực dashboard">
           <button class="dashboard-tab is-active" data-dashboard-tab-button="operations" role="tab" aria-selected="true" type="button">Vận hành</button>
+          <button class="dashboard-tab" data-dashboard-tab-button="retouch" role="tab" aria-selected="false" type="button">Gửi ảnh MagiMir <span class="tab-badge" id="retouchTabBadge" hidden>0</span></button>
+          <button class="dashboard-tab" data-dashboard-tab-button="compose" role="tab" aria-selected="false" type="button">Ghép ảnh</button>
           <button class="dashboard-tab" data-dashboard-tab-button="done" role="tab" aria-selected="false" type="button">Hoàn tất</button>
           <button class="dashboard-tab" data-dashboard-tab-button="revenue" role="tab" aria-selected="false" type="button">Doanh thu</button>
+          <button class="dashboard-tab" data-dashboard-tab-button="frames" role="tab" aria-selected="false" type="button">Frame</button>
           <button class="dashboard-tab" data-dashboard-tab-button="management" role="tab" aria-selected="false" type="button">Quản lý</button>
         </div>
 
@@ -103,7 +107,7 @@
             </div>
             <div class="revenue-table-wrap">
               <table class="revenue-table">
-                <thead><tr><th>Thời gian</th><th>Mã lượt</th><th>Khách hàng</th><th>Gói</th><th>Thanh toán</th><th class="money-cell">Doanh thu</th></tr></thead>
+                <thead><tr><th>Thời gian</th><th>Mã lượt</th><th>Khách hàng</th><th>Sinh nhật</th><th>Gói</th><th>Thanh toán</th><th class="money-cell">Doanh thu</th></tr></thead>
                 <tbody id="revenueTableBody"></tbody>
               </table>
             </div>
@@ -209,11 +213,21 @@
           <div class="session-list" id="autoFilterList"></div>
         </section>
 
-        <section class="panel" id="retouch" data-dashboard-view="management">
+                <section class="panel" id="staffCompose" data-dashboard-view="compose">
           <div class="section-head">
             <div>
-              <p class="eyebrow">04 / Auto edit</p>
-              <h2>Queue chinh sua tu dong</h2>
+              <p class="eyebrow">Compose</p>
+              <h2>Ghép ảnh cho khách</h2>
+            </div>
+            <span class="pill">Khách yêu cầu nhân viên ghép/in</span>
+          </div>
+          <div class="session-list" id="composeList"></div>
+        </section>
+<section class="panel" id="retouch" data-dashboard-view="retouch">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">MagiMir</p>
+              <h2>Gửi ảnh MagiMir</h2>
             </div>
           </div>
           <div class="session-list" id="retouchList"></div>
@@ -225,9 +239,27 @@
               <p class="eyebrow">07 / Packages</p>
               <h2>Quan ly gia goi, so tam in va frame</h2>
             </div>
-            <button class="primary-btn" id="savePackageSettingsBtn" type="button">Luu goi chup</button>
+            <div class="row-actions">
+              <button class="ghost-btn" id="addPackageBtn" type="button">Them goi</button>
+              <button class="primary-btn" id="savePackageSettingsBtn" type="button">Luu goi chup</button>
+            </div>
           </div>
           <div class="session-list package-settings-list" id="packageSettingsList"></div>
+        </section>
+
+        <section class="panel" id="frames" data-dashboard-view="frames">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Frame</p>
+              <h2>Quản lý frame và slot ảnh</h2>
+            </div>
+            <label class="file-btn">
+              Upload frame PNG
+              <input id="managedFrameUpload" type="file" accept="image/png,image/webp,image/jpeg" />
+            </label>
+          </div>
+          <p class="customer-note">Upload frame tại đây; frame mới sẽ hiển thị trong tất cả gói. Bấm chỉnh slot một lần để đặt vùng ảnh, màn khách sẽ tự nhận layout đã lưu.</p>
+          <div class="frame-manager-grid" id="frameManagerList"></div>
         </section>
 
         <section class="panel" id="filter-lab" data-dashboard-view="management">
@@ -281,7 +313,46 @@
         <form id="changeRevenuePinForm"><label>PIN mới<input id="newRevenuePinInput" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password" /></label><label>Nhập lại PIN<input id="confirmRevenuePinInput" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password" /></label><button class="primary-btn" type="submit">Lưu PIN mới</button></form>
       </div>
     </div>
+    <div class="link-modal" id="frameTestModal" hidden>
+      <div class="link-modal-card frame-test-modal">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">Frame slots</p>
+            <h2 id="frameTestTitle">Tạo slot ảnh</h2>
+          </div>
+          <button class="ghost-btn" id="closeFrameTestModalBtn" type="button">Dong</button>
+        </div>
+        <div class="frame-test-preview">
+          <canvas id="frameTestCanvas" width="1200" height="1800" aria-label="Tạo slot ảnh trên frame"></canvas>
+        </div>
+        <div class="frame-slot-editor">
+          <div class="frame-slot-toolbar">
+            <button class="ghost-btn" id="frameSlotPrevBtn" type="button">Slot trước</button>
+            <strong id="frameSlotLabel">Slot 1</strong>
+            <button class="ghost-btn" id="frameSlotNextBtn" type="button">Slot sau</button>
+          </div>
+          <div class="frame-layer-list" id="frameLayerList"></div>
+          <div class="frame-slot-toolbar">
+            <button class="ghost-btn" id="frameSlotBackBtn" type="button">Đổi thứ tự trước</button>
+            <button class="ghost-btn" id="frameSlotForwardBtn" type="button">Đổi thứ tự sau</button>
+          </div>
+          <div class="frame-slot-fields">
+            <label>X<input id="frameSlotX" type="number" step="1" /></label>
+            <label>Y<input id="frameSlotY" type="number" step="1" /></label>
+            <label>W<input id="frameSlotW" type="number" step="1" /></label>
+            <label>H<input id="frameSlotH" type="number" step="1" /></label>
+          </div>
+          <div class="frame-slot-toolbar">
+            <button class="ghost-btn" id="addFrameSlotBtn" type="button">Thêm slot</button>
+            <button class="ghost-btn" id="rotateFrameSlotBtn" type="button">Xoay slot</button>
+            <button class="danger-btn" id="deleteFrameSlotBtn" type="button">Xóa slot</button>
+            <button class="primary-btn" id="saveFrameSlotsBtn" type="button">Lưu slot</button>
+          </div>
+        </div>
+        <p class="customer-note">Slot là ảnh gốc từ camera tỉ lệ 3:2. Kéo slot để đổi vị trí; kéo ô vuông góc phải dưới để phóng to/thu nhỏ; bấm Xoay slot để đổi ngang/dọc.</p>
+      </div>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20260706-revenue3"></script>
+    <script charset="utf-8" src="app.js?v=20260820-birthday-focus-fix"></script>
   </body>
 </html>

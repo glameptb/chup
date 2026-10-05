@@ -113,13 +113,21 @@ function json(response, status, payload) {
 
 function findSessionByCode(state, input) {
   const code = String(input || "").trim().toUpperCase();
+  const digits = code.replace(/\D/g, "");
   return [...state.sessions]
     .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
-    .find((session) =>
-    [session.id, session.ticket, session.paymentCode]
-      .filter(Boolean)
-      .some((value) => String(value).trim().toUpperCase() === code)
-  );
+    .find((session) => {
+      const exactValues = [session.id, session.ticket, session.paymentCode]
+        .filter(Boolean)
+        .map((value) => String(value).trim().toUpperCase());
+      if (exactValues.some((value) => value === code)) return true;
+
+      const codeValues = [session.ticket, session.paymentCode]
+        .filter(Boolean)
+        .map((value) => String(value).replace(/\D/g, ""))
+        .filter(Boolean);
+      return digits && codeValues.some((value) => Number(value) === Number(digits));
+    });
 }
 
 function incomingImages() {
@@ -167,6 +175,57 @@ function collectSessionImages(session) {
     });
   session.rawCount = session.rawPhotos.length;
   return added;
+}
+
+function importRetouchedFolder(state, session, folderPath) {
+  const sourceDir = path.resolve(String(folderPath || "").trim());
+  if (!sourceDir || !fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
+    const error = new Error("RETOUCH_FOLDER_NOT_FOUND");
+    error.code = "RETOUCH_FOLDER_NOT_FOUND";
+    throw error;
+  }
+
+  const imageNames = fs.readdirSync(sourceDir)
+    .filter((file) => /\.(jpe?g|png|webp)$/i.test(file))
+    .sort((a, b) => fs.statSync(path.join(sourceDir, a)).mtimeMs - fs.statSync(path.join(sourceDir, b)).mtimeMs);
+
+  if (!imageNames.length) {
+    const error = new Error("NO_RETOUCHED_IMAGES");
+    error.code = "NO_RETOUCHED_IMAGES";
+    throw error;
+  }
+
+  const destinationDir = path.join(sessionsDir, session.id, "retouched");
+  fs.rmSync(destinationDir, { recursive: true, force: true });
+  fs.mkdirSync(destinationDir, { recursive: true });
+
+  const imported = imageNames.map((name, index) => {
+    const ext = path.extname(name).toLowerCase() || ".jpg";
+    const safeName = `${String(index + 1).padStart(3, "0")}-${path.basename(name).replace(/[^\w.-]+/g, "-")}`;
+    fs.copyFileSync(path.join(sourceDir, name), path.join(destinationDir, safeName));
+    return {
+      id: `${session.id}-retouched-${String(index + 1).padStart(2, "0")}`,
+      name: safeName,
+      originalName: name,
+      src: `/sessions/${encodeURIComponent(session.id)}/retouched/${encodeURIComponent(safeName)}`,
+      source: "magimir",
+      filterKey: "magimir",
+      filterLabel: "MagiMir",
+      filteredBeforeCustomerView: true,
+      capturedAt: new Date(fs.statSync(path.join(sourceDir, name)).mtimeMs).toISOString(),
+    };
+  });
+
+  session.originalRawPhotos ||= session.rawPhotos || [];
+  session.retouchedPhotos = imported;
+  session.rawPhotos = imported;
+  session.rawCount = imported.length;
+  session.retouchedCount = imported.length;
+  session.retouchExportFolder = sourceDir;
+  session.retouchedAt = new Date().toISOString();
+  session.status = "RETOUCH_READY";
+  writeState(state, { type: "RETOUCH_IMPORTED", sessionId: session.id, payload: { count: imported.length, folderPath: sourceDir } });
+  return imported.length;
 }
 
 function finalizeShootingState(state, session) {
@@ -401,14 +460,35 @@ const types = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".tflite": "application/octet-stream",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".pdf": "application/pdf",
   ".svg": "image/svg+xml",
 };
 
 const server = http.createServer((request, response) => {
   const requestUrl = new URL(request.url, `http://${host}:${port}`);
+  const origin = String(request.headers.origin || "");
+  const frameCorsOrigin = requestUrl.pathname === "/api/frame" && ["null", "http://127.0.0.1:4173", "http://localhost:4173"].includes(origin) ? origin : "";
+
+  if (requestUrl.pathname === "/api/frame" && request.method === "OPTIONS") {
+    if (!frameCorsOrigin) {
+      response.writeHead(403);
+      response.end();
+      return;
+    }
+    response.writeHead(204, {
+      "Access-Control-Allow-Origin": frameCorsOrigin,
+      "Access-Control-Allow-Methods": "POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    });
+    response.end();
+    return;
+  }
 
   if (requestUrl.pathname === "/api/revenue/auth/status" && request.method === "GET") {
     return json(response, 200, { ok: true, authorized: revenueAuthorized(request) });
@@ -455,16 +535,18 @@ const server = http.createServer((request, response) => {
         end = new Date(`${to}T00:00:00`); end.setDate(end.getDate() + 1);
       }
       const prices = { "3": 99000, "5": 149000, "10": 249000, ...(state.packageSettings || {}) };
-      const paid = state.sessions.filter((session) => session.paymentStatus === "PAID").filter((session) => {
-        const date = new Date(session.paidAt || session.createdAt || 0);
+      const revenueDate = (session) => new Date(session.paidAt || session.completedAt || session.printedAt || session.printRequestedAt || session.finalExportedAt || session.updatedAt || session.createdAt || 0);
+      const revenueStatuses = new Set(["FINAL_READY", "SENT_TO_PRINT_STAFF", "FINAL_EXPORTED", "PRINTED", "ZIP_READY", "COMPLETED"]);
+      const paid = state.sessions.filter((session) => session.paymentStatus !== "REFUNDED" && (session.paymentStatus === "PAID" || revenueStatuses.has(session.status))).filter((session) => {
+        const date = revenueDate(session);
         return !Number.isNaN(date.getTime()) && (range === "all" || (date >= start && (!end || date < end)));
-      }).sort((a, b) => new Date(a.paidAt || a.createdAt) - new Date(b.paidAt || b.createdAt));
+      }).sort((a, b) => revenueDate(a) - revenueDate(b));
       const payload = {
         businessName: "HỘ KINH DOANH GLAME PHOTOBOOTH",
         businessAddress: "",
         year: now.getFullYear(),
         rows: paid.map((session) => {
-          const date = new Date(session.paidAt || session.createdAt);
+          const date = revenueDate(session);
           const configured = state.packageSettings?.[session.packageId]?.price;
           const amount = Number(session.packagePrice ?? configured ?? prices[session.packageId] ?? 0);
           return { date: date.toLocaleDateString("vi-VN"), description: `Doanh thu dịch vụ chụp ảnh - ${session.ticket || session.id} - Gói ${session.packageId || ""} phút`, amount };
@@ -640,6 +722,48 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (requestUrl.pathname === "/api/customer/import-photo" && request.method === "POST") {
+    readBuffer(request).then((image) => {
+      const state = readState();
+      const session = findSessionByCode(state, requestUrl.searchParams.get("session"));
+      if (!session) return json(response, 404, { ok: false, error: "SESSION_NOT_FOUND" });
+      if (session.paymentStatus !== "PAID") return json(response, 409, { ok: false, error: "PAYMENT_REQUIRED" });
+      if (!image.length) return json(response, 400, { ok: false, error: "EMPTY_IMAGE" });
+
+      const contentType = String(request.headers["content-type"] || "").split(";")[0];
+      const validImage = (contentType === "image/jpeg" && image[0] === 0xff && image[1] === 0xd8)
+        || (contentType === "image/png" && image.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")))
+        || (contentType === "image/webp" && image.subarray(0, 4).toString() === "RIFF" && image.subarray(8, 12).toString() === "WEBP");
+      if (!validImage) return json(response, 415, { ok: false, error: "UNSUPPORTED_IMAGE" });
+
+      const extension = contentType === "image/png" ? ".png" : contentType === "image/webp" ? ".webp" : ".jpg";
+      const importedSource = requestUrl.searchParams.get("source") === "edited" ? "edited" : "original";
+      session.rawPhotos ||= [];
+      const sequence = session.rawPhotos.length + 1;
+      const fileName = `${session.id}_import_${Date.now()}_${String(sequence).padStart(3, "0")}${extension}`;
+      const destinationDir = path.join(sessionsDir, session.id, "raw");
+      fs.mkdirSync(destinationDir, { recursive: true });
+      fs.writeFileSync(path.join(destinationDir, fileName), image);
+      const importedAt = new Date().toISOString();
+      const capture = {
+        id: `${session.id}-import-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`,
+        name: fileName,
+        src: `/sessions/${encodeURIComponent(session.id)}/raw/${encodeURIComponent(fileName)}`,
+        source: importedSource,
+        filterKey: "clean",
+        filterLabel: importedSource === "edited" ? "Đã chỉnh" : "Gốc",
+        filteredBeforeCustomerView: importedSource === "edited",
+        capturedAt: importedAt,
+      };
+      session.rawPhotos.push(capture);
+      session.rawCount = session.rawPhotos.length;
+      if (["WAITING", "READY_TO_SHOOT", "SHOOTING", "PAUSED"].includes(session.status)) session.status = "RAW_READY";
+      session.updatedAt = importedAt;
+      writeState(state, { type: "CUSTOMER_IMAGE_IMPORTED", sessionId: session.id, payload: { name: fileName, size: image.length, source: importedSource } });
+      return json(response, 201, { ok: true, capture });
+    }).catch((error) => json(response, error.message === "Request too large" ? 413 : 400, { ok: false, error: "INVALID_IMAGE" }));
+    return;
+  }
   if (requestUrl.pathname === "/api/import/ptb-gallery" && request.method === "POST") {
     readJsonBody(request).then(async (payload) => {
       const state = readState();
@@ -716,6 +840,21 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (requestUrl.pathname === "/api/retouch/import-folder" && request.method === "POST") {
+    readJsonBody(request, 20_000).then((payload) => {
+      const state = readState();
+      const session = findSessionByCode(state, payload.sessionId);
+      if (!session) return json(response, 404, { ok: false, error: "SESSION_NOT_FOUND" });
+      const count = importRetouchedFolder(state, session, payload.folderPath);
+      return json(response, 200, { ok: true, session, count });
+    }).catch((error) => {
+      if (error?.code === "RETOUCH_FOLDER_NOT_FOUND") return json(response, 400, { ok: false, error: "Không tìm thấy folder MagiMir export." });
+      if (error?.code === "NO_RETOUCHED_IMAGES") return json(response, 400, { ok: false, error: "Folder MagiMir chưa có ảnh JPG/PNG/WebP." });
+      return json(response, 400, { ok: false, error: "Không import được folder ảnh đã chỉnh." });
+    });
+    return;
+  }
+
   if (requestUrl.pathname === "/api/state") {
     if (request.method === "GET") {
       const state = hydrateSessionTimers(readState());
@@ -751,12 +890,17 @@ const server = http.createServer((request, response) => {
 
   if (requestUrl.pathname === "/api/frame" && request.method === "POST") {
     let body = "";
+    let tooLarge = false;
     request.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 30_000_000) request.destroy();
+      if (body.length > 120_000_000) {
+        tooLarge = true;
+        request.destroy();
+      }
     });
     request.on("end", () => {
       try {
+        if (tooLarge) throw new Error("Frame image too large");
         const payload = JSON.parse(body || "{}");
         const name = String(payload.name || "frame.png").replace(/[^\w.-]+/g, "-").slice(0, 80);
         const image = String(payload.image || "");
@@ -768,10 +912,12 @@ const server = http.createServer((request, response) => {
         const fileName = `${id}-${name.replace(/\.[^.]+$/, "")}.${ext}`;
         const filePath = path.join(uploadedFrameDir, fileName);
         fs.writeFileSync(filePath, Buffer.from(match[2], "base64"));
-        response.writeHead(200, {
+        const headers = {
           "Content-Type": "application/json; charset=utf-8",
           "Cache-Control": "no-store",
-        });
+        };
+        if (frameCorsOrigin) headers["Access-Control-Allow-Origin"] = frameCorsOrigin;
+        response.writeHead(200, headers);
         response.end(JSON.stringify({
           ok: true,
           id,
@@ -779,7 +925,9 @@ const server = http.createServer((request, response) => {
           src: `/assets/uploaded-frames/${encodeURIComponent(fileName)}`,
         }));
       } catch {
-        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        const headers = { "Content-Type": "application/json; charset=utf-8" };
+        if (frameCorsOrigin) headers["Access-Control-Allow-Origin"] = frameCorsOrigin;
+        response.writeHead(400, headers);
         response.end(JSON.stringify({ ok: false }));
       }
     });
@@ -799,12 +947,16 @@ const server = http.createServer((request, response) => {
         const finalIndex = Math.max(1, Math.min(99, Number(payload.finalIndex || 1)));
         const image = String(payload.image || "");
         const match = image.match(/^data:image\/png;base64,(.+)$/);
+        const pdfMatch = String(payload.pdf || "").match(/^data:application\/pdf;base64,(.+)$/);
         if (!sessionId || !match) throw new Error("Invalid final image");
 
         fs.mkdirSync(finalDir, { recursive: true });
         const fileName = `${sessionId}_final_${String(finalIndex).padStart(2, "0")}.png`;
         const filePath = path.join(finalDir, fileName);
         fs.writeFileSync(filePath, Buffer.from(match[1], "base64"));
+        const pdfFileName = `${sessionId}_print_${String(finalIndex).padStart(2, "0")}.pdf`;
+        const pdfFilePath = path.join(finalDir, pdfFileName);
+        if (pdfMatch) fs.writeFileSync(pdfFilePath, Buffer.from(pdfMatch[1], "base64"));
 
         response.writeHead(200, {
           "Content-Type": "application/json; charset=utf-8",
@@ -815,6 +967,9 @@ const server = http.createServer((request, response) => {
           fileName,
           url: `/exports/final/${encodeURIComponent(fileName)}`,
           localPath: filePath,
+          pdfFileName: pdfMatch ? pdfFileName : null,
+          pdfUrl: pdfMatch ? `/exports/final/${encodeURIComponent(pdfFileName)}` : null,
+          pdfLocalPath: pdfMatch ? pdfFilePath : null,
         }));
       } catch {
         response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });

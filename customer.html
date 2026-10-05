@@ -7,11 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=20260701-gallery" />
+    <link rel="stylesheet" href="styles.css?v=20260820-ios-save-callout" />
     <link rel="stylesheet" href="customer-gallery.css?v=20260701-editor2" />
-    <link rel="stylesheet" href="customer-composer.css?v=20260703-print32" />
+    <link rel="stylesheet" href="customer-composer.css?v=20260818-composer-layout3" />
   </head>
-  <body class="customer-body">
+  <body class="customer-body is-waiting is-raw-stage">
     <main class="customer-shell">
       <header class="customer-hero">
         <div class="customer-brand-row">
@@ -24,7 +24,7 @@
         </div>
         <div class="session-card customer-session">
           <p>Mã phiên</p>
-          <h2 id="customerSessionCode">GL-0001</h2>
+          <h2 id="customerSessionCode">Chờ xác nhận</h2>
           <span id="customerSelectedCount">0/4 ảnh</span>
           <small id="customerSessionStatus">Đang tải phiên</small>
         </div>
@@ -48,9 +48,19 @@
           </div>
           <div class="photo-grid customer-photo-grid raw-photo-grid" id="customerRawPhotoGrid"></div>
           <div class="customer-photo-actions sticky-actions">
-            <button class="ghost-btn" id="customerDownloadAllBtn" type="button">Lưu tất cả vào Ảnh</button>
-            <button class="primary-btn" id="goComposerBtn" type="button">Chọn frame &amp; ghép ảnh →</button>
+            <button class="ghost-btn" id="customerDownloadAllBtn" type="button">Lưu tất cả</button>
+            <button class="primary-btn" id="goComposerBtn" type="button">Ghép frame</button>
           </div>
+        </div>
+      </section>
+
+      <section class="customer-method-stage" id="customerMethodStage">
+        <div class="panel-lite customer-method-card">
+          <p class="eyebrow">BƯỚC TIẾP THEO</p>
+          <h2>Bạn muốn ghép ảnh thế nào?</h2>
+          <button class="primary-btn wide method-primary-choice" id="composeOriginalBtn" type="button"><span>Ghép ngay với ảnh gốc</span><small>Bạn có thể tự chỉnh sửa</small></button>
+          <button class="ghost-btn wide" id="requestAutoEditRawBtn" type="button">Nhờ nhân viên chỉnh sửa</button>
+          <button class="customer-back-edit" id="backRawFromMethodBtn" type="button">← Quay lại ảnh vừa chụp</button>
         </div>
       </section>
 
@@ -77,6 +87,7 @@
               </button>
             </div>
             <p class="customer-note" id="customerFrameNote">Đang dùng frame: ChanBaek Rainbow</p>
+            <button class="ghost-btn" id="resetFrameChoicesBtn" type="button">Chọn lại</button>
             <button class="primary-btn wide" id="goComposerFromFrameBtn" type="button">Tiếp tục ghép ảnh</button>
           </div>
         </div>
@@ -84,6 +95,11 @@
 
       <section class="customer-workspace" id="customerComposerStage">
         <aside class="customer-preview">
+          <div class="customer-frame-toolbar">
+            <button class="customer-change-frame" id="backToFrameBtn" type="button">← Đổi frame</button>
+            <strong class="customer-frame-progress" id="customerFrameProgress">Frame 1/1</strong>
+            <span aria-hidden="true"></span>
+          </div>
           <div class="canvas-wrap">
             <canvas id="customerCanvas" width="1200" height="1800"></canvas>
           </div>
@@ -97,11 +113,12 @@
           </div>
           <div class="customer-filter-strip" aria-label="Bộ lọc ảnh">
             <button class="filter-chip" data-filter="clean" type="button">Không filter</button>
-            <button class="filter-chip" data-filter="learned" type="button">AI learned</button>
+            <button class="filter-chip" data-filter="learned" type="button">Brown</button>
             <button class="filter-chip" data-filter="bright" type="button">Sáng nhẹ</button>
             <button class="filter-chip" data-filter="rosy" type="button">Hồng nhẹ</button>
             <button class="filter-chip" data-filter="magimir" type="button">Retro</button>
-            <button class="filter-chip" data-filter="bw" type="button">B&amp;W</button>
+            <button class="filter-chip" data-filter="bw" type="button">B&amp;W film</button>
+            <button class="filter-chip" id="faceBeautyBtn" type="button">Da trắng lạnh</button>
           </div>
           <div class="customer-active-readout">
             <strong id="activePhotoLabel">Chưa chọn ảnh</strong>
@@ -115,7 +132,6 @@
                 <p class="eyebrow">03 / Photos</p>
                 <h2>Tất cả ảnh</h2>
               </div>
-              <button class="ghost-btn" id="backToFrameBtn" type="button">Đổi frame</button>
             </div>
             <div class="composer-strip-actions">
               <button class="composer-strip-command" id="autoFillFrameBtn" type="button">Tự động</button>
@@ -180,7 +196,6 @@
       </div>
 
       <div class="staff-only" aria-hidden="true">
-        <input id="customerPhotoInput" type="file" accept="image/*" multiple />
         <input id="mobileZoomInputFallback" type="range" min="1" max="2.5" step="0.05" value="1" />
         <input id="customerFrameTitle" type="text" value="BESTIE U40" />
         <input id="customerFrameSubtitle" type="text" value="GLAME PHOTOBOOTH" />
@@ -203,7 +218,7 @@
           <button class="filter-chip" data-filter="bright" type="button">Sáng da</button>
           <button class="filter-chip" data-filter="rosy" type="button">Hồng nhẹ</button>
           <button class="filter-chip" data-filter="film" type="button">Film</button>
-          <button class="filter-chip" data-filter="bw" type="button">B&W</button>
+          <button class="filter-chip" data-filter="bw" type="button">B&amp;W film</button>
           <button class="filter-chip" data-filter="sample" id="sampleFilterChip" type="button" hidden disabled>Ảnh mẫu</button>
           <input id="filterSampleInput" type="file" accept="image/*" />
           <button class="ghost-btn" id="applyFilterAllBtn" type="button">Áp filter</button>
@@ -226,6 +241,6 @@
     </div>
 
     <div class="toast" id="customerToast" role="status" aria-live="polite"></div>
-    <script src="customer.js?v=20260703-session36"></script>
+    <script charset="utf-8" src="customer.js?v=20260820-ios-save-callout"></script>
   </body>
 </html>

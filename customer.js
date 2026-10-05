@@ -1,8 +1,7 @@
 const customerUrlParams = new URLSearchParams(window.location.search);
 const CUSTOMER_ACTIVE_SESSION_KEY = "glame-active-customer-session";
 const requestedCustomerSession = customerUrlParams.get("session");
-const recoveredCustomerSession = localStorage.getItem(CUSTOMER_ACTIVE_SESSION_KEY);
-const initialCustomerSession = requestedCustomerSession || recoveredCustomerSession || "";
+const initialCustomerSession = requestedCustomerSession || "";
 
 const customerState = {
   sessionCode: initialCustomerSession,
@@ -14,6 +13,7 @@ const customerState = {
   activeSlotIndex: 0,
   photoAdjustments: {},
   photoFilters: {},
+  photoBeauty: {},
   copiedFilter: null,
   theme: "champagne",
   customFrame: { id: "frame1", name: "ChanBaek Rainbow", src: "assets/frame1-2.png", overlaySrc: "assets/frame1-2-overlay.png", maxPhotos: 4 },
@@ -21,20 +21,21 @@ const customerState = {
   rendered: false,
   currentStage: "raw",
   viewerPhotoId: null,
+  viewerSource: null,
+  viewerFileName: null,
   printCount: 1,
   currentFinalIndex: 1,
   completedFinals: [],
+  printFrameIds: [],
   allowedFrames: ["frame1", "frame2"],
   defaultFrameId: "frame1",
+  isEditingFinal: false,
 };
 
 if (customerState.sessionCode) {
   localStorage.setItem(CUSTOMER_ACTIVE_SESSION_KEY, customerState.sessionCode);
-  if (!requestedCustomerSession) {
-    const recoveredUrl = new URL(window.location.href);
-    recoveredUrl.searchParams.set("session", customerState.sessionCode);
-    history.replaceState(null, "", recoveredUrl);
-  }
+} else {
+  localStorage.removeItem(CUSTOMER_ACTIVE_SESSION_KEY);
 }
 
 const SESSION_STORAGE_KEY = "glame-local-sessions-v1";
@@ -42,7 +43,26 @@ const API_STATE_URL = "/api/state";
 const photoStatuses = ["RAW_READY", "RETOUCH_READY", "FINAL_READY", "SENT_TO_PRINT_STAFF", "FINAL_EXPORTED", "PRINTED", "ZIP_READY", "COMPLETED"];
 const packageMinutes = { "3": 3, "5": 5, "10": 10 };
 const packagePrintCounts = { "3": 1, "5": 2, "10": 3 };
-const CUSTOMER_DRAFT_KEY = `glame-customer-draft-${customerState.sessionCode}`;
+const CUSTOMER_DRAFT_KEY = `glame-customer-draft-v2-${customerState.sessionCode}`;
+
+function isSessionPaid(session) {
+  return session?.paymentStatus === "PAID";
+}
+
+function hasCapturedPhotos(session) {
+  return Boolean(session?.rawPhotos?.length || Number(session?.rawCount || 0) > 0);
+}
+
+function canShowCustomerPhotos(session) {
+  return Boolean(session && isSessionPaid(session) && hasCapturedPhotos(session));
+}
+
+if (customerUrlParams.get("reset") === "1") {
+  localStorage.removeItem(CUSTOMER_DRAFT_KEY);
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.searchParams.delete("reset");
+  history.replaceState(null, "", cleanUrl);
+}
 
 function persistCustomerDraft() {
   if (!customerState.sessionCode) return;
@@ -53,7 +73,9 @@ function persistCustomerDraft() {
     activeSlotIndex: customerState.activeSlotIndex,
     photoAdjustments: customerState.photoAdjustments,
     photoFilters: customerState.photoFilters,
+    photoBeauty: customerState.photoBeauty,
     frameId: customerState.customFrame?.id || null,
+    printFrameIds: customerState.printFrameIds,
     currentStage: customerState.currentStage,
     currentFinalIndex: customerState.currentFinalIndex,
   };
@@ -70,6 +92,8 @@ function loadCustomerDraft() {
     customerState.activeSlotIndex = Number.isInteger(draft.activeSlotIndex) ? draft.activeSlotIndex : 0;
     customerState.photoAdjustments = draft.photoAdjustments || {};
     customerState.photoFilters = draft.photoFilters || {};
+    customerState.photoBeauty = draft.photoBeauty || {};
+    customerState.printFrameIds = Array.isArray(draft.printFrameIds) ? draft.printFrameIds : [];
     customerState.currentFinalIndex = Math.max(1, Number(draft.currentFinalIndex || 1));
     return draft;
   } catch {
@@ -105,20 +129,19 @@ const customerFilters = {
   bright: { label: "Sáng da", canvas: "brightness(1.12) contrast(1.04) saturate(1.04)", thumb: "brightness(1.12) contrast(1.04) saturate(1.04)" },
   rosy: { label: "Hồng nhẹ", canvas: "brightness(1.08) contrast(1.03) saturate(1.18) sepia(0.08)", thumb: "brightness(1.08) contrast(1.03) saturate(1.18) sepia(0.08)" },
   film: { label: "Film", canvas: "contrast(1.12) saturate(0.82) sepia(0.18)", thumb: "contrast(1.12) saturate(0.82) sepia(0.18)" },
-  bw: { label: "Đen trắng", canvas: "grayscale(1) contrast(1.08)", thumb: "grayscale(1) contrast(1.08)" },
+  bw: { label: "B&W film", canvas: "grayscale(1) sepia(0.04) hue-rotate(180deg) brightness(1.06) contrast(0.96)", thumb: "grayscale(1) sepia(0.04) hue-rotate(180deg) brightness(1.06) contrast(0.96)" },
 };
 
 Object.assign(customerFilters.clean, { label: "Tự nhiên" });
 Object.assign(customerFilters.bright, { label: "Sáng da" });
 Object.assign(customerFilters.rosy, { label: "Hồng nhẹ" });
-Object.assign(customerFilters.bw, { label: "Đen trắng" });
+Object.assign(customerFilters.bw, { label: "B&W film" });
 
 Object.assign(customerFilters, {
   learned: {
-    label: "AI learned",
-    canvas: "brightness(1.02) contrast(1.05) saturate(0.82) sepia(0.16) hue-rotate(-4deg)",
-    thumb: "brightness(1.02) contrast(1.05) saturate(0.82) sepia(0.16) hue-rotate(-4deg)",
-    processor: "learned",
+    label: "Brown",
+    canvas: "brightness(1.04) contrast(1.03) saturate(0.9) sepia(0.02) hue-rotate(-2deg)",
+    thumb: "brightness(1.04) contrast(1.03) saturate(0.9) sepia(0.02) hue-rotate(-2deg)",
   },
   magimir: {
     label: "Magimir mem retro",
@@ -128,6 +151,12 @@ Object.assign(customerFilters, {
 });
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const lerp = (start, end, amount) => start + (end - start) * amount;
+const smoothstep = (edge0, edge1, value) => {
+  const amount = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return amount * amount * (3 - 2 * amount);
+};
+const FACE_BEAUTY_STRENGTH = 0.15;
 
 function makeCustomerId(prefix) {
   if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
@@ -139,6 +168,8 @@ const customerCtx = customerCanvas.getContext("2d");
 const customerToast = document.querySelector("#customerToast");
 const keyedFrameCache = new Map();
 let learnedCoefficientsPromise = null;
+let faceDetectorPromise = null;
+const faceBoxCache = new Map();
 
 function loadSessionStore() {
   if (customerState.remoteStore?.sessions) return customerState.remoteStore;
@@ -210,12 +241,17 @@ function updateSessionStatus(status, patch = {}) {
 function renderSessionStatus() {
   const { session } = getCurrentSession();
   const statusEl = document.querySelector("#customerSessionStatus");
+  const codeEl = document.querySelector("#customerSessionCode");
   if (!statusEl) return;
   if (!session) {
     statusEl.textContent = "Demo local - chưa có session trong dashboard";
+    if (codeEl) codeEl.textContent = "Chưa có phiên";
     return;
   }
-  statusEl.textContent = `${session.ticket} · ${session.customerName} · ${session.status}`;
+  if (codeEl) codeEl.textContent = isSessionPaid(session) ? (session.ticket || session.id) : "Chờ xác nhận";
+  statusEl.textContent = isSessionPaid(session)
+    ? `${session.ticket} · ${session.customerName} · ${session.status}`
+    : `${session.customerName || "Khách"} · Chờ xác nhận`;
 }
 
 function syncSessionPhotos(session) {
@@ -230,8 +266,11 @@ function syncSessionPhotos(session) {
       });
       presetFrames = merged;
     }
+    customerState.printFrameIds = customerState.printFrameIds
+      .filter((frameId) => presetFrames[frameId])
+      .slice(0, customerState.printCount);
     customerState.allowedFrames = Array.isArray(session.allowedFrames) && session.allowedFrames.length ? session.allowedFrames : ["frame1", "frame2"];
-    customerState.defaultFrameId = session.defaultFrameId || null;
+    customerState.defaultFrameId = customerState.allowedFrames.includes(session.defaultFrameId) ? session.defaultFrameId : customerState.allowedFrames[0];
     if (!customerState.defaultFrameId && customerState.currentStage === "raw") customerState.customFrame = null;
     updateAvailableFrames();
     updateFinalProgress();
@@ -250,10 +289,17 @@ function syncSessionPhotos(session) {
       customerState.photoFilters[rawPhoto.id] = rawPhoto.filterKey;
     }
   });
-  customerState.maxPhotos = session.frameSlots || customerState.maxPhotos;
+  customerState.photos.forEach((photo) => {
+    if (customerState.photoBeauty[photo.id] === undefined) customerState.photoBeauty[photo.id] = true;
+  });
+  customerState.maxPhotos = Number(customerState.customFrame?.slots?.length || customerState.customFrame?.maxPhotos || session.frameSlots || customerState.maxPhotos);
   if (customerState.photos.length !== beforeCount) {
     customerState.rendered = false;
   }
+  const nextButton = document.querySelector("#goComposerBtn");
+  if (nextButton) nextButton.textContent = "Ghép frame";
+  const editButton = document.querySelector("#requestAutoEditRawBtn");
+  if (editButton) editButton.textContent = "Nhờ nhân viên chỉnh sửa";
   updateFinalProgress();
 }
 
@@ -264,17 +310,42 @@ function renderPresetFrameButtons() {
   grid.innerHTML = allowed
     .map((frameId) => presetFrames[frameId])
     .filter(Boolean)
-    .map((frame) => `
-      <button class="preset-frame${customerState.customFrame?.id === frame.id ? " is-selected" : ""}" data-frame="${frame.id}" type="button">
+    .map((frame) => {
+      const selectedCount = customerState.printFrameIds.filter((frameId) => frameId === frame.id).length;
+      return `
+      <button class="preset-frame${selectedCount ? " is-selected" : ""}" data-frame="${frame.id}" type="button">
         <img src="${frame.src}" alt="${frame.name}" />
         <span>${frame.name}</span>
-        <strong>${frame.maxPhotos || 4} anh</strong>
+        <strong>${selectedCount ? `Đã chọn ${selectedCount} lượt` : `${frame.maxPhotos || 4} ảnh`}</strong>
       </button>
-    `)
+    `;
+    })
     .join("");
   grid.querySelectorAll(".preset-frame").forEach((button) => {
-    button.addEventListener("click", () => selectPresetFrame(button.dataset.frame));
+    button.addEventListener("click", () => choosePrintFrame(button.dataset.frame));
   });
+  updateFrameChoiceUi();
+}
+
+function updateFrameChoiceUi() {
+  const total = Math.max(1, Number(customerState.printCount || 1));
+  const selected = customerState.printFrameIds.length;
+  const note = document.querySelector("#customerFrameNote");
+  const continueButton = document.querySelector("#goComposerFromFrameBtn");
+  if (note) note.textContent = `Đã chọn ${selected}/${total} frame`;
+  if (continueButton) continueButton.disabled = selected !== total;
+}
+
+function choosePrintFrame(frameId) {
+  const total = Math.max(1, Number(customerState.printCount || 1));
+  if (!customerState.allowedFrames.includes(frameId) || !presetFrames[frameId]) return;
+  if (customerState.printFrameIds.length >= total) {
+    showCustomerToast("Đã chọn đủ frame. Bấm Chọn lại để đổi.");
+    return;
+  }
+  customerState.printFrameIds.push(frameId);
+  renderPresetFrameButtons();
+  persistCustomerDraft();
 }
 
 function renderCustomerGate() {
@@ -283,11 +354,8 @@ function renderCustomerGate() {
   const gateTitle = document.querySelector("#customerGateTitle");
   const gateText = document.querySelector("#customerGateText");
   const gateTicket = document.querySelector("#customerGateTicket");
-  const hasFilteredPhotos = Boolean(
-    session?.rawPhotos?.length &&
-      (session.autoFilter?.status === "APPLIED" || session.rawPhotos.every((photo) => photo.filterKey || photo.filteredBeforeCustomerView))
-  );
-  const isReady = session && photoStatuses.includes(session.status) && hasFilteredPhotos;
+  const hasSessionPhotos = hasCapturedPhotos(session);
+  const isReady = canShowCustomerPhotos(session);
 
   document.body.classList.toggle("is-ready", Boolean(isReady));
   document.body.classList.toggle("is-waiting", !isReady);
@@ -300,10 +368,10 @@ function renderCustomerGate() {
     return;
   }
 
-  gateTicket.textContent = session.ticket;
+  gateTicket.textContent = isSessionPaid(session) ? session.ticket : "----";
   if (session.status === "PAYMENT_CASH_PENDING") {
     gateStep.textContent = "Chờ xác nhận thanh toán";
-    gateTitle.textContent = `${session.ticket} · ${session.roomName || "Phòng chụp"}`;
+    gateTitle.textContent = session.roomName || "Phòng chụp";
     gateText.textContent = "Vui lòng thanh toán tiền mặt tại quầy. Trang sẽ tự cập nhật sau khi nhân viên xác nhận.";
   } else if (session.status === "WAITING" || session.status === "REJOINED_QUEUE") {
     const waiting = store.sessions.filter((item) => ["WAITING", "REJOINED_QUEUE", "CALLING", "SHOOTING", "PAUSED"].includes(item.status) && (!session.roomId || item.roomId === session.roomId));
@@ -321,7 +389,7 @@ function renderCustomerGate() {
     gateStep.textContent = "Đến lượt";
     gateTitle.textContent = "Mời bạn vào phòng chụp";
     gateText.textContent = "Nhân viên đang gọi số của bạn.";
-  } else if (session.status === "SHOOTING" || session.status === "PAUSED") {
+  } else if ((session.status === "SHOOTING" || session.status === "PAUSED") && !isReady) {
     gateStep.textContent = "Đang chụp";
     gateTitle.textContent = "Phiên chụp đang diễn ra";
     gateText.textContent = `Ảnh sẽ tự hiện ở đây sau khi chụp xong. Đã nhận ${session.rawCount || 0} ảnh.`;
@@ -346,7 +414,7 @@ async function refreshCustomerSessionView() {
   }
   syncSessionPhotos(session);
   const isFinalStatus = ["FINAL_READY", "SENT_TO_PRINT_STAFF", "PRINTED", "COMPLETED"].includes(session?.status);
-  if (isFinalStatus && customerState.completedFinals.length >= customerState.printCount) {
+  if (isFinalStatus && customerState.completedFinals.length >= customerState.printCount && !customerState.isEditingFinal) {
     setCustomerStage("final");
     const printRequested = session.status !== "FINAL_READY";
     const code = document.querySelector("#customerResultPrintCode");
@@ -365,9 +433,9 @@ async function refreshCustomerSessionView() {
   renderRawPhotoGrid();
   renderCustomerPhotoGrid();
   updateActivePhotoControls();
-  if (session && photoStatuses.includes(session.status) && customerState.currentStage === "composer" && customerState.selectedIds.length && !customerState.rendered) {
+  if (canShowCustomerPhotos(session) && customerState.currentStage === "composer" && customerState.selectedIds.length && !customerState.rendered) {
     renderCustomerCanvas({ silent: true });
-  } else if (session && photoStatuses.includes(session.status) && customerState.photos.length && !customerState.rendered) {
+  } else if (canShowCustomerPhotos(session) && customerState.photos.length && !customerState.rendered) {
     renderFramePreview();
   }
 }
@@ -389,7 +457,7 @@ function updateCustomerCount() {
   }
   const nextButton = document.querySelector("#goComposerBtn");
   if (nextButton) {
-    nextButton.textContent = "Chọn frame & ghép ảnh →";
+    nextButton.textContent = "Ghép frame";
   }
   updateFinalProgress();
 }
@@ -402,6 +470,8 @@ function updateFinalProgress() {
   if (progress) {
     progress.textContent = `Luot ghep ${current}/${total} - da gui ${Math.min(done, total)}/${total} file in`;
   }
+  const frameProgress = document.querySelector("#customerFrameProgress");
+  if (frameProgress) frameProgress.textContent = `Frame ${current}/${total}`;
   const printSummary = document.querySelector("#customerPrintSummary");
   if (printSummary) printSummary.textContent = `${total} tờ · 300dpi · Glossy`;
   const printCode = document.querySelector("#customerPrintCode");
@@ -443,12 +513,16 @@ function renderFinalResultGallery() {
   gallery.replaceChildren();
   const jobs = Array.isArray(customerState.completedFinals) ? customerState.completedFinals : [];
   jobs.forEach((job, index) => {
+    const fileName = job.fileName || `${customerState.sessionCode}-final-${index + 1}.png`;
+    const source = job.url || customerCanvas.toDataURL("image/png");
     const card = document.createElement("a");
+    card.href = source;
+    card.target = "_blank";
+    card.rel = "noopener";
+    card.download = fileName;
     card.className = "customer-final-card";
-    card.href = job.url || "#";
-    if (job.url) card.download = job.fileName || `${customerState.sessionCode}-final-${index + 1}.png`;
     const image = document.createElement("img");
-    image.src = job.url || customerCanvas.toDataURL("image/png");
+    image.src = source;
     image.alt = `Ảnh đã ghép ${index + 1}`;
     card.appendChild(image);
     gallery.appendChild(card);
@@ -483,6 +557,7 @@ function setCustomerStage(stage) {
 function setCustomerStage(stage) {
   customerState.currentStage = stage;
   document.body.classList.toggle("is-raw-stage", stage === "raw");
+  document.body.classList.toggle("is-method-stage", stage === "method");
   document.body.classList.toggle("is-frame-stage", stage === "frame");
   document.body.classList.toggle("is-composer-stage", stage === "composer");
   document.body.classList.toggle("is-final-stage", stage === "final");
@@ -510,6 +585,7 @@ function setCustomerStage(stage) {
 function setCustomerStage(stage) {
   customerState.currentStage = stage;
   document.body.classList.toggle("is-raw-stage", stage === "raw");
+  document.body.classList.toggle("is-method-stage", stage === "method");
   document.body.classList.toggle("is-frame-stage", stage === "frame");
   document.body.classList.toggle("is-composer-stage", stage === "composer");
   document.body.classList.toggle("is-final-stage", stage === "final");
@@ -520,12 +596,14 @@ function setCustomerStage(stage) {
   const copy = document.querySelector("#customerPageCopy");
   const titleMap = {
     raw: "\u1ea2nh v\u1eeba ch\u1ee5p",
+    method: "Gh\u00e9p \u1ea3nh",
     frame: "Ch\u1ecdn frame",
     composer: "Gh\u00e9p frame",
     final: "Ho\u00e0n t\u1ea5t",
   };
   const copyMap = {
     raw: "B\u1ea5m v\u00e0o \u1ea3nh \u0111\u1ec3 xem l\u1edbn. Nh\u1ea5n gi\u1eef \u1ea3nh \u0111\u1ec3 t\u1ea3i v\u1ec1 m\u00e1y.",
+    method: "Ch\u1ecdn c\u00e1ch x\u1eed l\u00fd \u1ea3nh tr\u01b0\u1edbc khi gh\u00e9p frame.",
     frame: "Ch\u1ecdn m\u1eabu frame b\u1ea1n mu\u1ed1n d\u00f9ng cho \u1ea3nh cu\u1ed1i.",
     composer: "Frame \u1edf tr\u00ean, t\u1ea5t c\u1ea3 \u1ea3nh \u1edf d\u01b0\u1edbi. B\u1ea5m \u1ea3nh \u0111\u1ec3 \u0111\u1ed5i \u1ea3nh trong \u00f4 \u0111ang ch\u1ecdn.",
     final: "Ghi nh\u1edb m\u00e3 in v\u00e0 t\u1ea3i \u1ea3nh \u0111\u00e3 gh\u00e9p v\u1ec1 m\u00e1y.",
@@ -544,6 +622,11 @@ function setCustomerStage(stage) {
   renderRawPhotoGrid();
   renderCustomerPhotoGrid();
   updateActivePhotoControls();
+}
+
+function backToCustomerStage(stage) {
+  customerState.isEditingFinal = true;
+  setCustomerStage(stage);
 }
 
 async function sourceToFile(source, fileName) {
@@ -571,14 +654,30 @@ async function shareImageFiles(files, fallbackSource) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  showCustomerToast("Ảnh đã mở. Nhấn giữ ảnh rồi chọn Lưu vào Ảnh.");
+  showCustomerToast("Trình duyệt chưa cho lưu thẳng vào Photos. Nhấn giữ ảnh rồi chọn Lưu vào Ảnh.");
   return false;
+}
+
+function downloadSourceDirect(source, fileName) {
+  const link = document.createElement("a");
+  link.href = source;
+  link.download = fileName;
+  link.target = "_blank";
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 async function downloadPhotoFile(photo) {
   if (!photo) return;
   const safeName = (photo.name || `${customerState.sessionCode}-photo.jpg`).replace(/[^a-zA-Z0-9._-]+/g, "-");
-  const source = photo.src;
+  const source = await photoExportSource(photo);
+  if (!window.isSecureContext || !navigator.share) {
+    downloadSourceDirect(source, safeName);
+    showCustomerToast("Ảnh đang được tải xuống.");
+    return;
+  }
   showCustomerToast("Đang chuẩn bị lưu ảnh...");
   try {
     const file = await sourceToFile(source, safeName);
@@ -586,6 +685,13 @@ async function downloadPhotoFile(photo) {
   } catch {
     showCustomerToast("Chưa lưu được ảnh. Vui lòng thử lại.");
   }
+}
+
+async function photoExportSource(photo) {
+  const filterKey = getPhotoFilter(photo.id);
+  if (filterKey === "clean" && !customerState.photoBeauty[photo.id]) return photo.src;
+  const canvas = await renderPhotoWithFilter(photo);
+  return canvas.toDataURL("image/jpeg", 0.95);
 }
 
 function toggleSelectedPhoto(id) {
@@ -605,10 +711,24 @@ function openPhotoViewer(photoId) {
   const photo = customerState.photos.find((item) => item.id === photoId);
   if (!photo) return;
   customerState.viewerPhotoId = photoId;
+  customerState.viewerSource = photoDisplaySrc(photo);
+  customerState.viewerFileName = photo.name;
   const viewer = document.querySelector("#photoViewer");
   const image = document.querySelector("#photoViewerImage");
-  image.src = photoDisplaySrc(photo);
+  image.src = customerState.viewerSource;
   image.style.filter = photoDisplayFilter(photo);
+  updateViewerFavoriteButton();
+  viewer.hidden = false;
+}
+
+function openImageSourceViewer(source, fileName) {
+  customerState.viewerPhotoId = null;
+  customerState.viewerSource = source;
+  customerState.viewerFileName = fileName;
+  const viewer = document.querySelector("#photoViewer");
+  const image = document.querySelector("#photoViewerImage");
+  image.src = source;
+  image.style.filter = "none";
   updateViewerFavoriteButton();
   viewer.hidden = false;
 }
@@ -616,6 +736,8 @@ function openPhotoViewer(photoId) {
 function updateViewerFavoriteButton() {
   const button = document.querySelector("#viewerFavoriteBtn");
   if (!button) return;
+  button.hidden = !customerState.viewerPhotoId;
+  if (!customerState.viewerPhotoId) return;
   const isSelected = customerState.favoriteIds.includes(customerState.viewerPhotoId);
   button.textContent = isSelected ? "♥ Đã ghim" : "♡ Ghim ảnh";
   button.classList.toggle("is-selected", isSelected);
@@ -625,6 +747,8 @@ function closePhotoViewer() {
   const viewer = document.querySelector("#photoViewer");
   const image = document.querySelector("#photoViewerImage");
   customerState.viewerPhotoId = null;
+  customerState.viewerSource = null;
+  customerState.viewerFileName = null;
   if (image) image.src = "";
   if (viewer) viewer.hidden = true;
 }
@@ -662,7 +786,9 @@ function renderRawPhotoGrid() {
     ["pointerup", "pointerleave", "pointercancel"].forEach((eventName) => {
       openButton.addEventListener(eventName, () => window.clearTimeout(holdTimer));
     });
-    openButton.addEventListener("click", () => openPhotoViewer(photo.id));
+    tile.addEventListener("click", (event) => {
+      if (!event.target.closest(".photo-favorite")) openPhotoViewer(photo.id);
+    });
     favoriteButton.addEventListener("click", () => toggleSelectedPhoto(photo.id));
     grid.appendChild(tile);
   });
@@ -670,10 +796,12 @@ function renderRawPhotoGrid() {
 
 function getActiveAdjustment() {
   if (!customerState.activePhotoId) return null;
-  if (!customerState.photoAdjustments[customerState.activePhotoId]) {
-    customerState.photoAdjustments[customerState.activePhotoId] = { x: 0, y: 0, zoom: 1 };
+  const slotIndex = Math.max(0, Number.isInteger(customerState.activeSlotIndex) ? customerState.activeSlotIndex : customerState.selectedIds.indexOf(customerState.activePhotoId));
+  const key = `${customerState.currentFinalIndex}:${customerState.customFrame?.id || "frame"}:${slotIndex}:${customerState.activePhotoId}`;
+  if (!customerState.photoAdjustments[key]) {
+    customerState.photoAdjustments[key] = { x: 0, y: 0, zoom: 1 };
   }
-  return customerState.photoAdjustments[customerState.activePhotoId];
+  return customerState.photoAdjustments[key];
 }
 
 function getPhotoFilter(photoId) {
@@ -685,7 +813,7 @@ function updateActivePhotoControls() {
   const zoomInput = document.querySelector("#photoZoomInput");
   const mobileZoomInput = document.querySelector("#mobileZoomInput");
   const filterLabel = document.querySelector("#activeFilterLabel");
-  const activeIndex = customerState.selectedIds.indexOf(customerState.activePhotoId);
+  const activeIndex = Number.isInteger(customerState.activeSlotIndex) ? customerState.activeSlotIndex : customerState.selectedIds.indexOf(customerState.activePhotoId);
   const adjustment = getActiveAdjustment();
 
   if (!customerState.activePhotoId || activeIndex < 0 || !adjustment) {
@@ -707,12 +835,20 @@ function updateActivePhotoControls() {
   });
 }
 
+function syncFaceBeautyButton() {
+  const button = document.querySelector("#faceBeautyBtn");
+  const photoId = customerState.activePhotoId;
+  const active = Boolean(photoId && customerState.photoBeauty[photoId]);
+  button?.classList.toggle("is-selected", active);
+  if (button) button.disabled = !photoId || getPhotoFilter(photoId) === "bw";
+}
+
 const baseUpdateActivePhotoControls = updateActivePhotoControls;
 updateActivePhotoControls = function updateActivePhotoControlsWithCleanText() {
   baseUpdateActivePhotoControls();
   const label = document.querySelector("#activePhotoLabel");
   const filterLabel = document.querySelector("#activeFilterLabel");
-  const activeIndex = customerState.selectedIds.indexOf(customerState.activePhotoId);
+  const activeIndex = Number.isInteger(customerState.activeSlotIndex) ? customerState.activeSlotIndex : customerState.selectedIds.indexOf(customerState.activePhotoId);
   if (!customerState.activePhotoId || activeIndex < 0) {
     if (label) label.textContent = "Chưa chọn ảnh";
     if (filterLabel) filterLabel.textContent = "Chưa chọn ảnh";
@@ -726,6 +862,7 @@ updateActivePhotoControls = function updateActivePhotoControlsWithCleanText() {
 const composerSelectionReadout = updateActivePhotoControls;
 updateActivePhotoControls = function updateActivePhotoControlsForSelection() {
   composerSelectionReadout();
+  syncFaceBeautyButton();
   syncComposerContinueButton();
   const label = document.querySelector("#activePhotoLabel");
   if (!label) return;
@@ -755,6 +892,15 @@ function loadLearnedCoefficients() {
   return learnedCoefficientsPromise;
 }
 
+function coolLearnedColor(red, green, blue) {
+  const corrected = [
+    1.0390611 * red - 0.02803785 * green - 0.0261367 * blue - 0.01386224,
+    -0.0160979 * red + 1.3005497 * green - 0.2954083 * blue - 0.00076589,
+    -0.06414189 * red + 0.51425946 * green + 0.5436051 * blue - 0.00084844,
+  ];
+  return [corrected[0] * 0.945, corrected[1] * 1.008, corrected[2] * 1.045];
+}
+
 function applyLearnedLookToContext(targetCtx, width, height, coeffs) {
   const imageData = targetCtx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -774,10 +920,91 @@ function applyLearnedLookToContext(targetCtx, width, height, coeffs) {
       outB += features[featureIndex] * coeffs[featureIndex][2];
     }
 
+    [outR, outG, outB] = coolLearnedColor(outR, outG, outB);
+
     data[index] = Math.round(clamp(outR, 0, 1) * 255);
     data[index + 1] = Math.round(clamp(outG, 0, 1) * 255);
     data[index + 2] = Math.round(clamp(outB, 0, 1) * 255);
   }
+
+  targetCtx.putImageData(imageData, 0, 0);
+}
+
+async function loadFaceDetector() {
+  if (!faceDetectorPromise) {
+    faceDetectorPromise = import("./vendor/mediapipe/vision_bundle.mjs").then(async ({ FaceDetector, FilesetResolver }) => {
+      const vision = await FilesetResolver.forVisionTasks("vendor/mediapipe/wasm");
+      return FaceDetector.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: "vendor/mediapipe/blaze_face_short_range.tflite" },
+        runningMode: "IMAGE",
+        minDetectionConfidence: 0.55,
+      });
+    });
+  }
+  return faceDetectorPromise;
+}
+
+async function getFaceBoxes(canvas, photoId) {
+  if (faceBoxCache.has(photoId)) return faceBoxCache.get(photoId);
+  const detector = await loadFaceDetector();
+  const result = detector.detect(canvas);
+  const boxes = result.detections.map(({ boundingBox }) => ({
+    x: boundingBox.originX / canvas.width,
+    y: boundingBox.originY / canvas.height,
+    width: boundingBox.width / canvas.width,
+    height: boundingBox.height / canvas.height,
+  }));
+  faceBoxCache.set(photoId, boxes);
+  return boxes;
+}
+
+async function applyFaceBeauty(targetCtx, width, height, photoId) {
+  const boxes = await getFaceBoxes(targetCtx.canvas, photoId);
+  if (!boxes.length) return;
+  const imageData = targetCtx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const blurCanvas = document.createElement("canvas");
+  blurCanvas.width = width;
+  blurCanvas.height = height;
+  const blurCtx = blurCanvas.getContext("2d");
+  blurCtx.putImageData(imageData, 0, 0);
+  blurCtx.filter = `blur(${clamp(Math.round(Math.min(width, height) * 0.0016), 1, 2)}px)`;
+  blurCtx.drawImage(blurCanvas, 0, 0);
+  blurCtx.filter = "none";
+  const blurred = blurCtx.getImageData(0, 0, width, height).data;
+
+  boxes.forEach((box) => {
+    const centerX = (box.x + box.width * 0.5) * width;
+    const centerY = (box.y + box.height * 0.52) * height;
+    const radiusX = box.width * width * 0.48;
+    const radiusY = box.height * height * 0.54;
+    const left = Math.max(0, Math.floor(centerX - radiusX));
+    const right = Math.min(width - 1, Math.ceil(centerX + radiusX));
+    const top = Math.max(0, Math.floor(centerY - radiusY));
+    const bottom = Math.min(height - 1, Math.ceil(centerY + radiusY));
+
+    for (let y = top; y <= bottom; y += 1) {
+      for (let x = left; x <= right; x += 1) {
+        const distance = Math.sqrt(((x - centerX) / radiusX) ** 2 + ((y - centerY) / radiusY) ** 2);
+        if (distance >= 1) continue;
+        const index = (y * width + x) * 4;
+        const red = data[index] / 255;
+        const green = data[index + 1] / 255;
+        const blue = data[index + 2] / 255;
+        const cb = -0.169 * red - 0.331 * green + 0.5 * blue + 0.5;
+        const cr = 0.5 * red - 0.419 * green - 0.081 * blue + 0.5;
+        const cbMask = smoothstep(0.27, 0.32, cb) * (1 - smoothstep(0.48, 0.53, cb));
+        const crMask = smoothstep(0.50, 0.54, cr) * (1 - smoothstep(0.66, 0.70, cr));
+        const faceFeather = 1 - smoothstep(0.82, 1, distance);
+        const amount = FACE_BEAUTY_STRENGTH * cbMask * crMask * faceFeather;
+        if (amount <= 0.01) continue;
+
+        data[index] = Math.round(lerp(data[index], blurred[index], amount));
+        data[index + 1] = Math.round(lerp(data[index + 1], blurred[index + 1], amount));
+        data[index + 2] = Math.round(lerp(data[index + 2], blurred[index + 2], amount));
+      }
+    }
+  });
 
   targetCtx.putImageData(imageData, 0, 0);
 }
@@ -800,12 +1027,17 @@ async function renderPhotoWithFilter(photo, { maxSide = 0 } = {}) {
     applyLearnedLookToContext(ctx, canvas.width, canvas.height, coeffs);
   }
 
+  if (customerState.photoBeauty[photo.id] && filter !== customerFilters.bw) {
+    await applyFaceBeauty(ctx, canvas.width, canvas.height, photo.id);
+  }
+
   return canvas;
 }
 
 async function prepareFilteredPreview(photo) {
   const filter = customerFilters[getPhotoFilter(photo.id)] || customerFilters.clean;
-  if (!filter.processor || photo.filteredSrc) return;
+  const hasBeauty = Boolean(customerState.photoBeauty[photo.id]);
+  if ((!filter.processor && !hasBeauty) || photo.filteredSrc) return;
   try {
     const canvas = await renderPhotoWithFilter(photo, { maxSide: 1000 });
     photo.filteredSrc = canvas.toDataURL("image/jpeg", 0.92);
@@ -818,12 +1050,12 @@ async function prepareFilteredPreview(photo) {
 
 function photoDisplaySrc(photo) {
   const filter = customerFilters[getPhotoFilter(photo.id)] || customerFilters.clean;
-  return filter.processor && photo.filteredSrc ? photo.filteredSrc : photo.src;
+  return (filter.processor || customerState.photoBeauty[photo.id]) && photo.filteredSrc ? photo.filteredSrc : photo.src;
 }
 
 function photoDisplayFilter(photo) {
   const filter = customerFilters[getPhotoFilter(photo.id)] || customerFilters.clean;
-  if (filter.processor) return photo.filteredSrc ? "none" : (filter.canvas || "none");
+  if (filter.processor || customerState.photoBeauty[photo.id]) return photo.filteredSrc ? "none" : (filter.canvas || "none");
   return filter.thumb || "none";
 }
 
@@ -935,9 +1167,9 @@ async function loadKeyedFrame(src) {
   return keyedImage;
 }
 
-function drawCustomerCover(image, x, y, width, height, adjustment = {}, filterKey = "clean") {
+function drawCustomerCover(image, x, y, width, height, adjustment = {}, filterKey = "clean", fitSlotHeight = false) {
   const zoom = adjustment.zoom || 1;
-  const scale = Math.max(width / image.width, height / image.height) * zoom;
+  const scale = (fitSlotHeight ? height / image.height : Math.max(width / image.width, height / image.height)) * zoom;
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
   const maxOffsetX = Math.max(0, (drawWidth - width) / 2);
@@ -973,6 +1205,7 @@ function drawCustomerCover(image, x, y, width, height, adjustment = {}, filterKe
           outG += features[featureIndex] * coeffs[featureIndex][1];
           outB += features[featureIndex] * coeffs[featureIndex][2];
         }
+        [outR, outG, outB] = coolLearnedColor(outR, outG, outB);
         data[index] = Math.round(clamp(outR, 0, 1) * 255);
         data[index + 1] = Math.round(clamp(outG, 0, 1) * 255);
         data[index + 2] = Math.round(clamp(outB, 0, 1) * 255);
@@ -992,7 +1225,43 @@ function drawCustomerRoundedRect(x, y, width, height, radius) {
   customerCtx.closePath();
 }
 
+function drawRotatedSlotClip(slot) {
+  const rotation = Number(slot.rotation || 0);
+  const centerX = slot.x + slot.w / 2;
+  const centerY = slot.y + slot.h / 2;
+  customerCtx.translate(centerX, centerY);
+  customerCtx.rotate(rotation);
+  drawCustomerRoundedRect(-slot.w / 2, -slot.h / 2, slot.w, slot.h, Math.min(18, slot.w / 8, slot.h / 8));
+}
+
+function setCustomerCanvasSize(width, height) {
+  const nextWidth = Math.max(1, Math.round(Number(width || 1200)));
+  const nextHeight = Math.max(1, Math.round(Number(height || 1800)));
+  if (customerCanvas.width !== nextWidth) customerCanvas.width = nextWidth;
+  if (customerCanvas.height !== nextHeight) customerCanvas.height = nextHeight;
+  customerCanvas.classList.toggle("is-landscape", nextWidth >= nextHeight);
+  customerCanvas.classList.toggle("is-portrait", nextWidth < nextHeight);
+}
+
+function inferSlotCanvasSize(frame) {
+  const savedWidth = Number(frame?.slotCanvasWidth || 0);
+  const savedHeight = Number(frame?.slotCanvasHeight || 0);
+  if (savedWidth > 0 && savedHeight > 0) return { width: savedWidth, height: savedHeight };
+  return { width: 1200, height: 1800 };
+}
+
 function getLayoutSlots() {
+  if (Array.isArray(customerState.customFrame?.slots) && customerState.customFrame.slots.length) {
+    const source = inferSlotCanvasSize(customerState.customFrame);
+    return customerState.customFrame.slots.map((slot) => ({
+      x: Math.round(Number.isFinite(Number(slot.rx)) ? Number(slot.rx) * customerCanvas.width : Number(slot.x || 0) * customerCanvas.width / source.width),
+      y: Math.round(Number.isFinite(Number(slot.ry)) ? Number(slot.ry) * customerCanvas.height : Number(slot.y || 0) * customerCanvas.height / source.height),
+      w: Math.round(Number.isFinite(Number(slot.rw)) ? Number(slot.rw) * customerCanvas.width : Number(slot.w || 0) * customerCanvas.width / source.width),
+      h: Math.round(Number.isFinite(Number(slot.rh)) ? Number(slot.rh) * customerCanvas.height : Number(slot.h || 0) * customerCanvas.height / source.height),
+      rotation: Number(slot.rotation || 0),
+    }));
+  }
+
   if (customerState.customFrame?.id === "frame1") {
     return [
       { x: 64, y: 138, w: 512, h: 660 },
@@ -1047,14 +1316,16 @@ function renderCustomerPlaceholder() {
 
 async function renderFramePreview() {
   if (!customerState.customFrame) {
+    setCustomerCanvasSize(1200, 1800);
     renderCustomerPlaceholder();
     return;
   }
 
   const frameImage = await loadCustomerImage(customerState.customFrame.src);
+  setCustomerCanvasSize(frameImage.naturalWidth || frameImage.width, frameImage.naturalHeight || frameImage.height);
   customerCtx.fillStyle = "#ffffff";
   customerCtx.fillRect(0, 0, customerCanvas.width, customerCanvas.height);
-  drawCustomerCover(frameImage, 0, 0, customerCanvas.width, customerCanvas.height);
+  customerCtx.drawImage(frameImage, 0, 0, customerCanvas.width, customerCanvas.height);
 }
 
 function drawDefaultFrame(theme, title, subtitle) {
@@ -1101,6 +1372,11 @@ async function renderCustomerCanvas(options = {}) {
   }
   const images = await Promise.all(selectedPhotos.map((photo) => loadCustomerImage(photoDisplaySrc(photo))));
   const frameImage = customerState.customFrame ? await loadCustomerImage(customerState.customFrame.src) : null;
+  if (frameImage) {
+    setCustomerCanvasSize(frameImage.naturalWidth || frameImage.width, frameImage.naturalHeight || frameImage.height);
+  } else {
+    setCustomerCanvasSize(1200, 1800);
+  }
   const keyedFrameImage = customerState.customFrame
     ? (customerState.customFrame.overlaySrc
       ? await loadCustomerImage(customerState.customFrame.overlaySrc)
@@ -1113,7 +1389,7 @@ async function renderCustomerCanvas(options = {}) {
   customerCtx.fillRect(0, 0, customerCanvas.width, customerCanvas.height);
 
   if (frameImage) {
-    drawCustomerCover(frameImage, 0, 0, customerCanvas.width, customerCanvas.height);
+    customerCtx.drawImage(frameImage, 0, 0, customerCanvas.width, customerCanvas.height);
   }
 
   if (!frameImage) {
@@ -1127,18 +1403,21 @@ async function renderCustomerCanvas(options = {}) {
   images.forEach((image, index) => {
     const slot = slotSet[selectedEntries[index].slotIndex] || slotSet[slotSet.length - 1];
     const photo = selectedPhotos[index];
-    const adjustment = customerState.photoAdjustments[photo.id] || {};
+    const adjustmentKey = `${customerState.currentFinalIndex}:${customerState.customFrame?.id || "frame"}:${selectedEntries[index].slotIndex}:${photo.id}`;
+    const adjustment = customerState.photoAdjustments[adjustmentKey] || {};
     const selectedFilterKey = getPhotoFilter(photo.id);
-    const filterKey = customerFilters[selectedFilterKey]?.processor && photo.filteredSrc ? "clean" : selectedFilterKey;
+    const hasRotation = Math.abs(Number(slot.rotation || 0)) > 0.001;
+    const hasBakedFilter = Boolean(photo.filteredSrc && (customerFilters[selectedFilterKey]?.processor || customerState.photoBeauty[photo.id]));
+    const filterKey = hasBakedFilter || (customerFilters[selectedFilterKey]?.processor && hasRotation) ? "clean" : selectedFilterKey;
     customerCtx.save();
-    drawCustomerRoundedRect(slot.x, slot.y, slot.w, slot.h, 18);
+    drawRotatedSlotClip(slot);
     customerCtx.clip();
-    drawCustomerCover(image, slot.x, slot.y, slot.w, slot.h, adjustment, filterKey);
+    drawCustomerCover(image, -slot.w / 2, -slot.h / 2, slot.w, slot.h, adjustment, filterKey, true);
     customerCtx.restore();
   });
 
   if (keyedFrameImage) {
-    drawCustomerCover(keyedFrameImage, 0, 0, customerCanvas.width, customerCanvas.height);
+    customerCtx.drawImage(keyedFrameImage, 0, 0, customerCanvas.width, customerCanvas.height);
   } else {
     drawDefaultFrame(theme, title, subtitle);
   }
@@ -1247,27 +1526,21 @@ function renderCustomerPhotoGrid() {
 }
 
 async function usePhotoInComposer(id) {
-  const existingIndex = customerState.selectedIds.indexOf(id);
-  if (existingIndex >= 0) {
-    customerState.activeSlotIndex = existingIndex;
-    customerState.activePhotoId = id;
+  const activeIndex = Number.isInteger(customerState.activeSlotIndex) ? customerState.activeSlotIndex : -1;
+  const emptyIndex = customerState.selectedIds.findIndex((photoId) => !photoId);
+  if (activeIndex >= 0 && activeIndex < customerState.maxPhotos) {
+    customerState.selectedIds[activeIndex] = id;
+  } else if (emptyIndex >= 0) {
+    customerState.selectedIds[emptyIndex] = id;
+    customerState.activeSlotIndex = emptyIndex;
+  } else if (customerState.selectedIds.length < customerState.maxPhotos) {
+    customerState.selectedIds.push(id);
+    customerState.activeSlotIndex = customerState.selectedIds.length - 1;
   } else {
-    const activeIndex = Number.isInteger(customerState.activeSlotIndex) ? customerState.activeSlotIndex : -1;
-    const emptyIndex = customerState.selectedIds.findIndex((photoId) => !photoId);
-    if (activeIndex >= 0 && activeIndex < customerState.maxPhotos) {
-      customerState.selectedIds[activeIndex] = id;
-    } else if (emptyIndex >= 0) {
-      customerState.selectedIds[emptyIndex] = id;
-      customerState.activeSlotIndex = emptyIndex;
-    } else if (customerState.selectedIds.length < customerState.maxPhotos) {
-      customerState.selectedIds.push(id);
-      customerState.activeSlotIndex = customerState.selectedIds.length - 1;
-    } else {
-      showCustomerToast("Chạm ảnh đang nằm trong frame trước, rồi chọn ảnh thay thế.");
-      return;
-    }
-    customerState.activePhotoId = id;
+    showCustomerToast("Chạm ảnh đang nằm trong frame trước, rồi chọn ảnh thay thế.");
+    return;
   }
+  customerState.activePhotoId = id;
   customerState.rendered = false;
   renderCustomerPhotoGrid();
   updateActivePhotoControls();
@@ -1297,7 +1570,7 @@ function removeActivePhotoFromFrame() {
   else renderFramePreview();
 }
 
-function toggleCustomerPhoto(id) {
+async function toggleCustomerPhoto(id) {
   const currentIndex = customerState.selectedIds.indexOf(id);
   if (currentIndex >= 0) {
     customerState.activePhotoId = id;
@@ -1313,23 +1586,42 @@ function toggleCustomerPhoto(id) {
   customerState.rendered = false;
   renderCustomerPhotoGrid();
   updateActivePhotoControls();
+  const photo = customerState.photos.find((item) => item.id === id);
+  if (photo) await prepareFilteredPreview(photo);
 }
 
-function addCustomerFiles(files, source) {
-  files
-    .filter((file) => file.type.startsWith("image/"))
-    .forEach((file) => {
-      customerState.photos.push({
-        id: makeCustomerId("local-photo"),
-        name: file.name,
-        src: URL.createObjectURL(file),
-        source,
-      });
-    });
+async function uploadCustomerImport(file, source) {
+  const response = await fetch(`/api/customer/import-photo?session=${encodeURIComponent(customerState.sessionCode)}&source=${encodeURIComponent(source)}`, {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) throw new Error("UPLOAD_FAILED");
+  const payload = await response.json();
+  return payload.capture;
+}
+
+async function addCustomerFiles(files, source) {
+  const images = files.filter((file) => file.type.startsWith("image/"));
+  let imported = 0;
+  for (const file of images) {
+    try {
+      const photo = await uploadCustomerImport(file, source);
+      if (!customerState.photos.some((item) => item.id === photo.id || item.src === photo.src)) {
+        customerState.photos.push(photo);
+        customerState.photoBeauty[photo.id] = true;
+        imported += 1;
+      }
+    } catch {
+      showCustomerToast("Không lưu được ảnh import lên server.");
+    }
+  }
 
   customerState.rendered = false;
   renderRawPhotoGrid();
   renderCustomerPhotoGrid();
+  persistCustomerDraft();
+  return imported;
 }
 
 async function autoFillCurrentFrame() {
@@ -1376,14 +1668,24 @@ async function downloadAllCustomerPhotos() {
     return;
   }
 
+  if (!window.isSecureContext || !navigator.share) {
+    customerState.photos.forEach((photo, index) => {
+      const name = (photo.name || `${customerState.sessionCode}-${index + 1}.jpg`).replace(/[^a-zA-Z0-9._-]+/g, "-");
+      downloadSourceDirect(photo.src, name);
+    });
+    showCustomerToast("Tất cả ảnh đang được tải xuống.");
+    return;
+  }
+
   showCustomerToast("Đang chuẩn bị tất cả ảnh...");
   try {
+    const sources = await Promise.all(customerState.photos.map((photo) => photoExportSource(photo)));
     const files = await Promise.all(customerState.photos.map((photo, index) => {
-      const source = photo.src;
+      const source = sources[index];
       const name = (photo.name || `${customerState.sessionCode}-${index + 1}.jpg`).replace(/[^a-zA-Z0-9._-]+/g, "-");
       return sourceToFile(source, name);
     }));
-    await shareImageFiles(files, customerState.photos[0]?.src);
+    await shareImageFiles(files, sources[0]);
   } catch {
     showCustomerToast("Chưa thể chuẩn bị tất cả ảnh. Hãy lưu từng ảnh.");
   }
@@ -1391,11 +1693,19 @@ async function downloadAllCustomerPhotos() {
 
 async function downloadCustomerCanvas() {
   const completed = Array.isArray(customerState.completedFinals) ? customerState.completedFinals : [];
-  const savedFinal = completed[completed.length - 1];
+  const savedFinals = completed.filter((job) => job?.url);
 
-  if (savedFinal?.url) {
-    const file = await sourceToFile(savedFinal.url, savedFinal.fileName || `${customerState.sessionCode}-final.png`);
-    await shareImageFiles([file], savedFinal.url);
+  if (savedFinals.length) {
+    showCustomerToast("Đang chuẩn bị ảnh để lưu...");
+    try {
+      const files = await Promise.all(savedFinals.map((job, index) => {
+        const name = job.fileName || `${customerState.sessionCode}-final-${String(index + 1).padStart(2, "0")}.png`;
+        return sourceToFile(job.url, name);
+      }));
+      await shareImageFiles(files, savedFinals[0].url);
+    } catch {
+      showCustomerToast("Chưa lưu được ảnh. Hãy mở từng ảnh rồi nhấn giữ để lưu.");
+    }
     return;
   }
 
@@ -1411,17 +1721,21 @@ async function downloadCustomerCanvas() {
 }
 
 function requestAutoEdit() {
-  if (!customerState.selectedIds.length) {
+  const requestedIds = customerState.selectedIds.filter(Boolean).length
+    ? customerState.selectedIds.filter(Boolean)
+    : (customerState.favoriteIds.length ? customerState.favoriteIds : customerState.photos.map((photo) => photo.id));
+  if (!requestedIds.length) {
     showCustomerToast("Chọn ảnh raw cần chỉnh trước.");
     return;
   }
 
   updateSessionStatus("RETOUCH_REQUESTED", {
-    retouchCount: customerState.selectedIds.length,
+    retouchPhotoIds: requestedIds,
+    retouchCount: requestedIds.length,
     retouchLevel: "Tự nhiên",
-    retouchNote: "Khách yêu cầu chỉnh sửa tự động trước khi ghép frame.",
+    retouchNote: "Khách yêu cầu quán chỉnh ảnh bằng MagiMir trước khi ghép frame.",
   });
-  showCustomerToast("Đã gửi yêu cầu chỉnh sửa tự động cho nhân viên.");
+  showCustomerToast("Đã gửi yêu cầu quán chỉnh ảnh cho nhân viên.");
 }
 
 function mockRawZipDownload() {
@@ -1434,7 +1748,118 @@ function mockRawZipDownload() {
   showCustomerToast("Demo: ZIP ảnh gốc sẽ do Local Agent tạo trong bản thật.");
 }
 
-async function sendFinalToPrintStaff() {
+function createPrintPdfDataUrl(canvas) {
+  const sourceBounds = detectCanvasContentBounds(canvas);
+  const landscape = sourceBounds.w >= sourceBounds.h;
+  const pageWidth = landscape ? 432 : 288;
+  const pageHeight = landscape ? 288 : 432;
+  const targetWidth = landscape ? 1800 : 1200;
+  const targetHeight = landscape ? 1200 : 1800;
+  const printCanvas = document.createElement("canvas");
+  printCanvas.width = targetWidth;
+  printCanvas.height = targetHeight;
+  const context = printCanvas.getContext("2d");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, printCanvas.width, printCanvas.height);
+  drawCover(context, canvas, sourceBounds, 0, 0, targetWidth, targetHeight);
+
+  const jpegData = printCanvas.toDataURL("image/jpeg", 0.98).split(",")[1];
+  const jpegBytes = Uint8Array.from(atob(jpegData), (character) => character.charCodeAt(0));
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const offsets = [0];
+  let length = 0;
+  const append = (value) => {
+    const bytes = typeof value === "string" ? encoder.encode(value) : value;
+    chunks.push(bytes);
+    length += bytes.length;
+  };
+  const object = (number, body) => {
+    offsets[number] = length;
+    append(`${number} 0 obj\n${body}\nendobj\n`);
+  };
+
+  append("%PDF-1.4\n%GLAME\n");
+  object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  object(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`);
+  const drawing = `q ${pageWidth} 0 0 ${pageHeight} 0 0 cm /Im0 Do Q`;
+  object(4, `<< /Length ${drawing.length} >>\nstream\n${drawing}\nendstream`);
+  offsets[5] = length;
+  append(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${printCanvas.width} /Height ${printCanvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+  append(jpegBytes);
+  append("\nendstream\nendobj\n");
+
+  const xrefOffset = length;
+  append("xref\n0 6\n0000000000 65535 f \n");
+  for (let index = 1; index <= 5; index += 1) {
+    append(`${String(offsets[index]).padStart(10, "0")} 00000 n \n`);
+  }
+  append(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+  const pdfBytes = new Uint8Array(length);
+  let position = 0;
+  chunks.forEach((chunk) => {
+    pdfBytes.set(chunk, position);
+    position += chunk.length;
+  });
+  let binary = "";
+  for (let index = 0; index < pdfBytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...pdfBytes.subarray(index, index + 0x8000));
+  }
+  return `data:application/pdf;base64,${btoa(binary)}`;
+}
+
+function detectCanvasContentBounds(canvas) {
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const alpha = data[offset + 3];
+      const r = data[offset];
+      const g = data[offset + 1];
+      const b = data[offset + 2];
+      if (alpha > 8 && (r < 248 || g < 248 || b < 248)) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return { x: 0, y: 0, w: canvas.width, h: canvas.height };
+  const pad = Math.ceil(Math.min(width, height) * 0.003);
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(width - 1, maxX + pad);
+  maxY = Math.min(height - 1, maxY + pad);
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function drawCover(context, image, source, x, y, width, height) {
+  const targetRatio = width / height;
+  let sx = source.x;
+  let sy = source.y;
+  let sw = source.w;
+  let sh = source.h;
+  if (sw / sh > targetRatio) {
+    const nextW = sh * targetRatio;
+    sx += (sw - nextW) / 2;
+    sw = nextW;
+  } else {
+    const nextH = sw / targetRatio;
+    sy += (sh - nextH) / 2;
+    sh = nextH;
+  }
+  context.drawImage(image, sx, sy, sw, sh, x, y, width, height);
+}
+
+async function legacySendFinalToPrintStaff() {
   const requiredPhotos = Math.max(1, Number(customerState.maxPhotos || 1));
   const filledPhotos = customerState.selectedIds.filter(Boolean).length;
   if (filledPhotos < requiredPhotos) {
@@ -1491,6 +1916,7 @@ async function sendFinalToPrintStaff() {
         sessionId: customerState.sessionCode,
         finalIndex,
         image: customerCanvas.toDataURL("image/png"),
+        pdf: createPrintPdfDataUrl(customerCanvas),
       }),
     });
     if (response.ok) {
@@ -1500,6 +1926,9 @@ async function sendFinalToPrintStaff() {
         fileName: saved.fileName || finalJob.fileName,
         url: saved.url,
         localPath: saved.localPath,
+        pdfFileName: saved.pdfFileName,
+        pdfUrl: saved.pdfUrl,
+        pdfLocalPath: saved.pdfLocalPath,
       };
     }
   } catch {
@@ -1521,6 +1950,8 @@ async function sendFinalToPrintStaff() {
     finalFile: finalJob.fileName,
     finalUrl: finalJob.url,
     finalLocalPath: finalJob.localPath,
+    finalPdfUrl: finalJob.pdfUrl,
+    finalPdfLocalPath: finalJob.pdfLocalPath,
     finalExportedAt: finalJob.createdAt,
   });
 
@@ -1533,13 +1964,14 @@ async function sendFinalToPrintStaff() {
     customerState.selectedIds = [];
     customerState.activePhotoId = null;
     customerState.rendered = false;
-    renderFramePreview();
-    setCustomerStage("frame");
-    showCustomerToast(`Đã gửi mã in ${finalJob.printCode}. Chọn frame tiếp theo.`);
+    selectPresetFrame(customerState.printFrameIds[completedCount]);
+    setCustomerStage("composer");
+    showCustomerToast(`Đã xong frame ${completedCount}/${printCount}. Ghép frame tiếp theo.`);
     return;
   }
 
   const printCodes = printTicket;
+  customerState.isEditingFinal = false;
   setCustomerStage("final");
   showCustomerToast("Đã ghép đủ ảnh. Bạn có thể tải ảnh hoặc tiếp tục yêu cầu in.");
 }
@@ -1740,7 +2172,7 @@ function adjustActivePhoto(action) {
   rerenderIfPossible();
 }
 
-function selectActiveFilter(filterKey) {
+async function selectActiveFilter(filterKey) {
   if (!customerFilters[filterKey]) return;
   if (!customerState.activePhotoId || !customerState.selectedIds.includes(customerState.activePhotoId)) {
     showCustomerToast("Chọn một ảnh trong frame trước khi đổi filter.");
@@ -1748,9 +2180,43 @@ function selectActiveFilter(filterKey) {
   }
 
   customerState.photoFilters[customerState.activePhotoId] = filterKey;
+  const photo = customerState.photos.find((item) => item.id === customerState.activePhotoId);
+  if (photo) {
+    photo.filteredSrc = null;
+    await prepareFilteredPreview(photo);
+  }
   updateActivePhotoControls();
   renderCustomerPhotoGrid();
   rerenderIfPossible();
+}
+
+async function toggleActiveFaceBeauty() {
+  const photo = customerState.photos.find((item) => item.id === customerState.activePhotoId);
+  if (!photo || !customerState.selectedIds.includes(photo.id)) {
+    showCustomerToast("Chọn một ảnh trong frame trước khi bật beauty.");
+    return;
+  }
+  if (getPhotoFilter(photo.id) === "bw") {
+    showCustomerToast("Beauty khuôn mặt không áp dụng cho B&W.");
+    return;
+  }
+
+  customerState.photoBeauty[photo.id] = !customerState.photoBeauty[photo.id];
+  photo.filteredSrc = null;
+  syncFaceBeautyButton();
+  showCustomerToast(customerState.photoBeauty[photo.id] ? "Đang nhận diện khuôn mặt..." : "Đã tắt beauty khuôn mặt.");
+  try {
+    await prepareFilteredPreview(photo);
+    renderCustomerPhotoGrid();
+    await renderCustomerCanvas({ silent: true });
+    persistCustomerDraft();
+    if (customerState.photoBeauty[photo.id]) showCustomerToast("Đã áp da trắng nhẹ cho khuôn mặt.");
+  } catch {
+    customerState.photoBeauty[photo.id] = false;
+    photo.filteredSrc = null;
+    syncFaceBeautyButton();
+    showCustomerToast("Không nhận diện được khuôn mặt.");
+  }
 }
 
 function applyActiveFilterToSelected() {
@@ -1785,8 +2251,8 @@ function selectPresetFrame(frameId) {
   if (!frame) return;
 
   customerState.customFrame = frame;
-  customerState.maxPhotos = frame.maxPhotos;
-  customerState.selectedIds = customerState.selectedIds.slice(0, customerState.maxPhotos);
+  customerState.maxPhotos = Number(frame.slots?.length || frame.maxPhotos || 1);
+  customerState.selectedIds = Array.from({ length: customerState.maxPhotos }, (_, index) => customerState.selectedIds[index] || null);
   if (!customerState.selectedIds.includes(customerState.activePhotoId)) {
     customerState.activePhotoId = customerState.selectedIds[0] || null;
   }
@@ -1815,29 +2281,65 @@ function updateAvailableFrames() {
     selectPresetFrame(preferredFrame);
   } else if (customerState.customFrame?.id && !allowed.includes(customerState.customFrame.id)) {
     customerState.customFrame = null;
+  } else if (customerState.customFrame?.id && presetFrames[customerState.customFrame.id]) {
+    const currentLayout = JSON.stringify([
+      customerState.customFrame.src,
+      customerState.customFrame.slotCanvasWidth,
+      customerState.customFrame.slotCanvasHeight,
+      customerState.customFrame.slots,
+    ]);
+    const refreshedFrame = presetFrames[customerState.customFrame.id];
+    const refreshedLayout = JSON.stringify([
+      refreshedFrame.src,
+      refreshedFrame.slotCanvasWidth,
+      refreshedFrame.slotCanvasHeight,
+      refreshedFrame.slots,
+    ]);
+    customerState.customFrame = refreshedFrame;
+    customerState.maxPhotos = Number(refreshedFrame.slots?.length || refreshedFrame.maxPhotos || 1);
+    customerState.selectedIds = customerState.selectedIds.slice(0, customerState.maxPhotos);
+    while (customerState.selectedIds.length < customerState.maxPhotos) customerState.selectedIds.push(null);
+    if (currentLayout !== refreshedLayout) customerState.rendered = false;
   }
 }
 
-document.querySelector("#customerSessionCode").textContent = customerState.sessionCode;
+async function enterCustomerComposer() {
+  if (!customerState.photos.length) {
+    showCustomerToast("Chưa có ảnh để ghép frame.");
+    return;
+  }
+  if (!customerState.customFrame?.id) {
+    const allowed = customerState.allowedFrames?.length ? customerState.allowedFrames : ["frame1", "frame2"];
+    const preferredFrame = allowed.includes(customerState.defaultFrameId) ? customerState.defaultFrameId : allowed[0];
+    if (preferredFrame) selectPresetFrame(preferredFrame);
+  }
+  if (!customerState.selectedIds.length) {
+    customerState.selectedIds = Array(customerState.maxPhotos).fill(null);
+    customerState.activeSlotIndex = 0;
+    customerState.activePhotoId = null;
+    customerState.rendered = false;
+  }
+  setCustomerStage("composer");
+  if (!customerState.selectedIds.some(Boolean)) {
+    await renderFramePreview();
+  } else {
+    await renderCustomerCanvas({ silent: true });
+  }
+}
 
-document.querySelector("#customerPhotoInput").addEventListener("change", (event) => {
+document.querySelector("#customerSessionCode").textContent = "Chờ xác nhận";
+
+document.querySelector("#customerEditedInput").addEventListener("change", async (event) => {
   const files = [...event.target.files].filter((file) => file.type.startsWith("image/"));
-  addCustomerFiles(files, "original");
+  const imported = await addCustomerFiles(files, "edited");
   event.target.value = "";
-  showCustomerToast(`Đã import ${files.length} ảnh gốc.`);
+  showCustomerToast(`Đã import ${imported} ảnh đã chỉnh.`);
 });
 
-document.querySelector("#customerEditedInput").addEventListener("change", (event) => {
-  const files = [...event.target.files].filter((file) => file.type.startsWith("image/"));
-  addCustomerFiles(files, "edited");
-  event.target.value = "";
-  showCustomerToast(`Đã import ${files.length} ảnh đã chỉnh.`);
-});
-
-document.querySelector("#composerUploadInput")?.addEventListener("change", (event) => {
+document.querySelector("#composerUploadInput")?.addEventListener("change", async (event) => {
   const files = [...event.target.files].filter((file) => file.type.startsWith("image/"));
   const previousIds = new Set(customerState.photos.map((photo) => photo.id));
-  addCustomerFiles(files, "edited");
+  await addCustomerFiles(files, "edited");
   const importedIds = customerState.photos.filter((photo) => !previousIds.has(photo.id)).map((photo) => photo.id);
   customerState.favoriteIds = [...importedIds, ...customerState.favoriteIds.filter((id) => !importedIds.includes(id))];
   renderCustomerPhotoGrid();
@@ -1926,7 +2428,7 @@ document.querySelector("#customerConfirmPrintBtn")?.addEventListener("click", ()
   if (backButton) backButton.hidden = true;
 });
 document.querySelector("#customerBackToEditBtn")?.addEventListener("click", () => {
-  setCustomerStage("composer");
+  backToCustomerStage("composer");
 });
 document.querySelector("#sendPrintBtn").addEventListener("click", sendFinalToPrintStaff);
 document.querySelector("#requestAutoEditBtn").addEventListener("click", requestAutoEdit);
@@ -1934,31 +2436,36 @@ document.querySelector("#rawZipBtn").addEventListener("click", mockRawZipDownloa
 document.querySelector("#customerDownloadSelectedBtn").addEventListener("click", downloadSelectedCustomerPhotos);
 document.querySelector("#customerDownloadAllBtn").addEventListener("click", downloadAllCustomerPhotos);
 document.querySelector("#goComposerBtn").addEventListener("click", () => {
-  if (!customerState.photos.length) {
-    showCustomerToast("Chưa có ảnh để ghép frame.");
-    return;
-  }
-  setCustomerStage("frame");
+  setCustomerStage("method");
 });
-document.querySelector("#backRawFromFrameBtn")?.addEventListener("click", () => setCustomerStage("raw"));
-document.querySelector("#backToFrameBtn")?.addEventListener("click", () => setCustomerStage("frame"));
+document.querySelector("#requestAutoEditRawBtn")?.addEventListener("click", requestAutoEdit);
+document.querySelector("#composeOriginalBtn")?.addEventListener("click", () => setCustomerStage("frame"));
+document.querySelector("#backRawFromMethodBtn")?.addEventListener("click", () => backToCustomerStage("raw"));
+document.querySelector("#backRawFromFrameBtn")?.addEventListener("click", () => backToCustomerStage("raw"));
+document.querySelector("#backToFrameBtn")?.addEventListener("click", () => {
+  const currentIndex = Math.max(0, Number(customerState.currentFinalIndex || 1) - 1);
+  customerState.printFrameIds = customerState.printFrameIds.slice(0, currentIndex);
+  renderPresetFrameButtons();
+  persistCustomerDraft();
+  backToCustomerStage("frame");
+});
 document.querySelector("#goComposerFromFrameBtn")?.addEventListener("click", () => {
-  if (!customerState.photos.length) {
-    showCustomerToast("Chua co anh de ghep frame.");
+  const total = Math.max(1, Number(customerState.printCount || 1));
+  if (customerState.printFrameIds.length !== total) {
+    showCustomerToast(`Chọn đủ ${total} frame trước khi tiếp tục.`);
     return;
   }
-  if (!customerState.customFrame?.id) {
-    showCustomerToast("Vui lòng chọn một frame trước khi ghép ảnh.");
-    return;
-  }
-  if (!customerState.selectedIds.length) {
-    customerState.selectedIds = Array(customerState.maxPhotos).fill(null);
-    customerState.activeSlotIndex = 0;
-    customerState.activePhotoId = null;
-    customerState.rendered = false;
-  }
-  renderFramePreview();
-  setCustomerStage("composer");
+  customerState.selectedIds = [];
+  customerState.activePhotoId = null;
+  customerState.activeSlotIndex = 0;
+  customerState.rendered = false;
+  selectPresetFrame(customerState.printFrameIds[Math.max(0, customerState.currentFinalIndex - 1)]);
+  enterCustomerComposer();
+});
+document.querySelector("#resetFrameChoicesBtn")?.addEventListener("click", () => {
+  customerState.printFrameIds = [];
+  renderPresetFrameButtons();
+  persistCustomerDraft();
 });
 document.querySelector("#viewerCloseBtn").addEventListener("click", closePhotoViewer);
 document.querySelector("#viewerCloseIconBtn")?.addEventListener("click", closePhotoViewer);
@@ -1973,7 +2480,7 @@ document.querySelector("#photoViewer").addEventListener("click", (event) => {
 });
 document.querySelector("#viewerDownloadBtn").addEventListener("click", () => {
   const photo = customerState.photos.find((item) => item.id === customerState.viewerPhotoId);
-  downloadPhotoFile(photo);
+  downloadPhotoFile(photo || (customerState.viewerSource ? { src: customerState.viewerSource, name: customerState.viewerFileName } : null));
 });
 document.querySelectorAll("[data-adjust]").forEach((button) => {
   button.addEventListener("click", () => adjustActivePhoto(button.dataset.adjust));
@@ -1981,6 +2488,7 @@ document.querySelectorAll("[data-adjust]").forEach((button) => {
 document.querySelectorAll("[data-filter]").forEach((button) => {
   button.addEventListener("click", () => selectActiveFilter(button.dataset.filter));
 });
+document.querySelector("#faceBeautyBtn")?.addEventListener("click", toggleActiveFaceBeauty);
 document.querySelector("#filterSampleInput").addEventListener("change", (event) => {
   loadSampleFilter(event.target.files[0]);
   event.target.value = "";
@@ -2004,12 +2512,41 @@ document.querySelector("#mobileZoomInput").addEventListener("input", (event) => 
   rerenderIfPossible();
 });
 document.querySelectorAll(".preset-frame").forEach((button) => {
-  button.addEventListener("click", () => selectPresetFrame(button.dataset.frame));
+  button.addEventListener("click", () => choosePrintFrame(button.dataset.frame));
 });
 customerCanvas.addEventListener("pointerdown", handlePreviewPointerDown);
 customerCanvas.addEventListener("pointermove", handlePreviewPointerMove);
 customerCanvas.addEventListener("pointerup", handlePreviewPointerEnd);
 customerCanvas.addEventListener("pointercancel", handlePreviewPointerEnd);
+
+function applyCustomerTestStage() {
+  const requestedStage = customerUrlParams.get("stage");
+  if (!customerState.staffMode || !["raw", "method", "frame", "composer"].includes(requestedStage)) return false;
+  if (customerUrlParams.get("autofill") === "1" && requestedStage === "composer") {
+    const allowed = customerState.allowedFrames?.length ? customerState.allowedFrames : ["frame1", "frame2"];
+    const defaultFrame = allowed.includes(customerState.defaultFrameId) ? customerState.defaultFrameId : allowed[0];
+    const printCount = Math.max(1, Number(customerState.printCount || 1));
+    if (customerState.printFrameIds.length < printCount && defaultFrame) {
+      customerState.printFrameIds = Array.from({ length: printCount }, (_, index) => customerState.printFrameIds[index] || defaultFrame);
+    }
+    if (!customerState.customFrame?.id && defaultFrame) {
+      selectPresetFrame(defaultFrame);
+    }
+    const chosen = [...customerState.photos]
+      .sort((a, b) => Number(customerState.favoriteIds.includes(b.id)) - Number(customerState.favoriteIds.includes(a.id)))
+      .slice(0, Math.max(1, Number(customerState.maxPhotos || 1)));
+    customerState.selectedIds = Array.from({ length: customerState.maxPhotos }, (_, index) => chosen[index]?.id || null);
+    customerState.activeSlotIndex = 0;
+    customerState.activePhotoId = customerState.selectedIds[0] || null;
+    customerState.rendered = false;
+  }
+  setCustomerStage(requestedStage);
+  if (requestedStage === "composer") {
+    if (customerState.selectedIds.some(Boolean)) renderCustomerCanvas({ silent: true });
+    else renderFramePreview();
+  }
+  return true;
+}
 
 async function bootCustomerPage() {
   if (!customerState.sessionCode) {
@@ -2028,9 +2565,9 @@ async function bootCustomerPage() {
   } else if (customerState.defaultFrameId && customerState.allowedFrames.includes(customerState.defaultFrameId)) {
     selectPresetFrame(customerState.defaultFrameId);
   }
-  const restorableStage = ["raw", "frame", "composer"].includes(savedDraft?.currentStage) ? savedDraft.currentStage : "raw";
+  const restorableStage = ["raw", "method", "frame", "composer"].includes(savedDraft?.currentStage) ? savedDraft.currentStage : "raw";
   const { session } = getCurrentSession();
-  if (!["FINAL_READY", "SENT_TO_PRINT_STAFF", "PRINTED", "COMPLETED"].includes(session?.status)) {
+  if (!applyCustomerTestStage() && !["FINAL_READY", "SENT_TO_PRINT_STAFF", "PRINTED", "COMPLETED"].includes(session?.status)) {
     setCustomerStage(restorableStage);
   }
   window.setInterval(refreshCustomerSessionView, 2000);

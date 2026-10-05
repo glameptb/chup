@@ -19,6 +19,8 @@ const defaultFrames = [
 
 const draft = { roomId: "room-1", name: "", contact: "", packageId: "3", paymentMethod: "BANK_TRANSFER", paymentCode: "" };
 let state = { nextNumber: 1, sessions: [] };
+let activeTicketId = null;
+let ticketPollTimer = null;
 const money = new Intl.NumberFormat("vi-VN");
 const toast = document.querySelector("#toast");
 
@@ -26,7 +28,7 @@ function loadPackageSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(PACKAGE_SETTINGS_KEY));
     Object.entries(stored || {}).forEach(([id, patch]) => {
-      if (!packages[id]) return;
+      if (!packages[id]) packages[id] = { id, name: patch.name || `Goi ${Number(patch.minutes || 3)} phut`, minutes: Number(patch.minutes || 3), price: Number(patch.price || 0), printCount: 1, frameSlots: 4, defaultFrameId: null, allowedFrames: [], printFrameIds: [], frameCatalog: [] };
       packages[id] = { ...packages[id], ...patch, id };
     });
   } catch {}
@@ -40,7 +42,8 @@ async function loadState() {
   state.nextNumber = Math.max(1, Number(state.nextNumber || 1));
   if (state.packageSettings && typeof state.packageSettings === "object") {
     Object.entries(state.packageSettings).forEach(([id, patch]) => {
-      if (packages[id]) packages[id] = { ...packages[id], ...patch, id };
+      if (!packages[id]) packages[id] = { id, name: patch.name || `Goi ${Number(patch.minutes || 3)} phut`, minutes: Number(patch.minutes || 3), price: Number(patch.price || 0), printCount: 1, frameSlots: 4, defaultFrameId: null, allowedFrames: [], printFrameIds: [], frameCatalog: [] };
+      packages[id] = { ...packages[id], ...patch, id };
     });
   }
 }
@@ -132,6 +135,12 @@ async function createSession(paymentMethod) {
   await loadState();
   const code = nextSessionNumber();
   const pack = packages[draft.packageId];
+  const frameCatalog = Array.isArray(pack.frameCatalog) && pack.frameCatalog.length ? pack.frameCatalog : defaultFrames;
+  const validFrameIds = new Set(frameCatalog.map((frame) => frame.id));
+  const allowedFrames = (Array.isArray(pack.allowedFrames) && pack.allowedFrames.length ? pack.allowedFrames : frameCatalog.map((frame) => frame.id))
+    .filter((id) => validFrameIds.has(id));
+  if (!allowedFrames.length && frameCatalog[0]?.id) allowedFrames.push(frameCatalog[0].id);
+  const defaultFrameId = allowedFrames.includes(pack.defaultFrameId) ? pack.defaultFrameId : allowedFrames[0];
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const id = `GL-${today}-${code}`;
   const session = {
@@ -149,10 +158,11 @@ async function createSession(paymentMethod) {
     paymentStatus: "CASH_PENDING",
     status: "PAYMENT_CASH_PENDING",
     frameSlots: Number(pack.frameSlots || 4),
-    printCount: Number(pack.printCount || 1),
-    defaultFrameId: pack.defaultFrameId || null,
-    allowedFrames: pack.allowedFrames || ["frame1", "frame2"],
-    availableFrames: (pack.frameCatalog || defaultFrames).filter((frame) => (pack.allowedFrames || ["frame1", "frame2"]).includes(frame.id)),
+    printCount: Math.max(1, Number(pack.printCount || 1)),
+    defaultFrameId,
+    allowedFrames,
+    printFrameIds: [],
+    availableFrames: frameCatalog.filter((frame) => allowedFrames.includes(frame.id)),
     finalJobs: [], rawCount: 0,
     createdAt: new Date().toISOString(),
     paidAt: null,
@@ -161,6 +171,7 @@ async function createSession(paymentMethod) {
   await saveState();
   localStorage.setItem(ACTIVE_SESSION_KEY, session.id);
   showTicket(session);
+  startTicketPolling(session.id);
 }
 
 function showTicket(session) {
@@ -170,11 +181,25 @@ function showTicket(session) {
   const wait = Math.ceil(queue.slice(0, Math.max(0, position)).reduce((total, item) => total + sessionMinutes(item), 0));
   const cashPending = session.status === "PAYMENT_CASH_PENDING";
   document.querySelector("#ticketTitle").textContent = cashPending ? "Chờ nhân viên xác nhận thanh toán" : "Phiên đã vào hàng chờ";
-  document.querySelector("#ticketNumber").textContent = session.ticket;
+  document.querySelector("#ticketNumber").textContent = cashPending ? "Chờ xác nhận" : session.ticket;
   document.querySelector("#ticketMeta").textContent = `${session.roomName} · ${pack?.name || session.packageId} · ${cashPending ? "Chưa xác nhận thanh toán" : "Đã thanh toán"}`;
   document.querySelector("#ticketWaitTime").textContent = cashPending ? "Chờ xác nhận" : `${wait} phút`;
   document.querySelector("#sessionLink").href = `customer.html?session=${encodeURIComponent(session.id)}`;
   setStep("ticket");
+}
+
+function startTicketPolling(sessionId) {
+  activeTicketId = sessionId;
+  clearInterval(ticketPollTimer);
+  ticketPollTimer = setInterval(async () => {
+    try {
+      await loadState();
+      const fresh = state.sessions.find((session) => session.id === activeTicketId);
+      if (!fresh) return;
+      showTicket(fresh);
+      if (fresh.paymentStatus === "PAID" && fresh.status !== "PAYMENT_CASH_PENDING") clearInterval(ticketPollTimer);
+    } catch {}
+  }, 2000);
 }
 
 document.querySelector("#roomGrid").addEventListener("click", (event) => {

@@ -1,11 +1,13 @@
 const adminState = {
   photos: [],
   activePhotoId: null,
-  activeFilter: "clean",
+  activeFilter: "blackMist",
   sampleBase: null,
   sampleIntensity: 100,
   effectContrast: 115,
   learnedCoefficients: null,
+  proNegStdLut: null,
+  classicChromeLut: null,
   backgroundRules: [],
   lastBackgroundDetection: null,
 };
@@ -26,10 +28,12 @@ const adminFilters = {
   rosy: { label: "Hồng nhẹ", values: { ...baseValues, brightness: 1.08, contrast: 1.03, saturate: 1.18, sepia: 0.08 } },
   blackMist: { label: "Black mist", processor: "blackMist", values: { ...baseValues } },
   dream: { label: "Dream soft glow", processor: "dream", values: { ...baseValues } },
-  learned: { label: "AI learned", processor: "learned", values: { ...baseValues } },
+  learned: { label: "Brown", processor: "learned", values: { ...baseValues } },
   magimir: { label: "Magimir mềm retro", processor: "magimir", values: { ...baseValues, brightness: 1.03, contrast: 1.02, saturate: 0.86, sepia: 0.14, hue: -3, grayscale: 0 } },
   film: { label: "Film", values: { ...baseValues, contrast: 1.12, saturate: 0.82, sepia: 0.18 } },
-  bw: { label: "B&W", values: { ...baseValues, contrast: 1.08, grayscale: 1 } },
+  proNegStd: { label: "Pro Neg Std", processor: "lut", lutKey: "proNegStdLut", values: { ...baseValues } },
+  classicChrome: { label: "Classic Chrome", processor: "lut", lutKey: "classicChromeLut", values: { ...baseValues } },
+  bw: { label: "B&W film", values: { ...baseValues, brightness: 1.06, contrast: 0.96, sepia: 0.04, hue: 180, grayscale: 1 } },
 };
 
 const canvas = document.querySelector("#adminFilterCanvas");
@@ -258,12 +262,12 @@ function loadImage(src) {
 function filterToCss(filter) {
   const values = filter?.values || baseValues;
   return [
+    `grayscale(${values.grayscale.toFixed(2)})`,
     `brightness(${values.brightness.toFixed(2)})`,
     `contrast(${values.contrast.toFixed(2)})`,
     `saturate(${values.saturate.toFixed(2)})`,
     `sepia(${values.sepia.toFixed(2)})`,
     `hue-rotate(${values.hue.toFixed(0)}deg)`,
-    `grayscale(${values.grayscale.toFixed(2)})`,
   ].join(" ");
 }
 
@@ -425,6 +429,15 @@ function applyMagimirLook(targetCtx, width, height) {
   targetCtx.putImageData(imageData, 0, 0);
 }
 
+function coolLearnedColor(red, green, blue) {
+  const corrected = [
+    1.0390611 * red - 0.02803785 * green - 0.0261367 * blue - 0.01386224,
+    -0.0160979 * red + 1.3005497 * green - 0.2954083 * blue - 0.00076589,
+    -0.06414189 * red + 0.51425946 * green + 0.5436051 * blue - 0.00084844,
+  ];
+  return [corrected[0] * 0.98, corrected[1] * 1.003, corrected[2] * 1.012];
+}
+
 function applyLearnedLook(targetCtx, width, height) {
   if (!adminState.learnedCoefficients) return;
   const coeffs = adminState.learnedCoefficients;
@@ -446,9 +459,49 @@ function applyLearnedLook(targetCtx, width, height) {
       outB += featureValues[featureIndex] * coeffs[featureIndex][2];
     }
 
+    [outR, outG, outB] = coolLearnedColor(outR, outG, outB);
+
     data[index] = Math.round(clamp(outR, 0, 1) * 255);
     data[index + 1] = Math.round(clamp(outG, 0, 1) * 255);
     data[index + 2] = Math.round(clamp(outB, 0, 1) * 255);
+  }
+
+  targetCtx.putImageData(imageData, 0, 0);
+}
+
+function applyLutLook(targetCtx, width, height, lutKey) {
+  const lut = adminState[lutKey];
+  if (!lut) return;
+  const imageData = targetCtx.getImageData(0, 0, width, height);
+  const pixels = imageData.data;
+  const { size, data } = lut;
+  const max = size - 1;
+
+  const sample = (r, g, b, channel) => data[(((r * size + g) * size + b) * 3) + channel];
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    const red = (pixels[index] / 255) * max;
+    const green = (pixels[index + 1] / 255) * max;
+    const blue = (pixels[index + 2] / 255) * max;
+    const r0 = Math.floor(red);
+    const g0 = Math.floor(green);
+    const b0 = Math.floor(blue);
+    const r1 = Math.min(r0 + 1, max);
+    const g1 = Math.min(g0 + 1, max);
+    const b1 = Math.min(b0 + 1, max);
+    const rf = red - r0;
+    const gf = green - g0;
+    const bf = blue - b0;
+
+    for (let channel = 0; channel < 3; channel += 1) {
+      const c00 = lerp(sample(r0, g0, b0, channel), sample(r0, g0, b1, channel), bf);
+      const c01 = lerp(sample(r0, g1, b0, channel), sample(r0, g1, b1, channel), bf);
+      const c10 = lerp(sample(r1, g0, b0, channel), sample(r1, g0, b1, channel), bf);
+      const c11 = lerp(sample(r1, g1, b0, channel), sample(r1, g1, b1, channel), bf);
+      const c0 = lerp(c00, c01, gf);
+      const c1 = lerp(c10, c11, gf);
+      pixels[index + channel] = Math.round(clamp(lerp(c0, c1, rf), 0, 1) * 255);
+    }
   }
 
   targetCtx.putImageData(imageData, 0, 0);
@@ -599,6 +652,9 @@ function drawFullImage(image, targetCtx, width, height, filter) {
   }
   if (filter?.processor === "blackMist") {
     applyBlackMist(targetCtx, width, height);
+  }
+  if (filter?.processor === "lut") {
+    applyLutLook(targetCtx, width, height, filter.lutKey);
   }
 }
 
@@ -778,24 +834,6 @@ document.querySelector("#downloadAllBtn").addEventListener("click", () => {
     window.setTimeout(() => downloadPhoto(photo, index), index * 180);
   });
 });
-document.querySelector("#autoDetectCurrentBtn").addEventListener("click", () => autoDetectCurrentPhoto({ shouldApply: false }));
-document.querySelector("#autoApplyByBackgroundBtn").addEventListener("click", autoApplyAllByBackground);
-backgroundRuleSelect.addEventListener("change", syncBackgroundRuleEditor);
-document.querySelector("#saveBackgroundRuleBtn").addEventListener("click", () => {
-  const rule = adminState.backgroundRules.find((item) => item.id === backgroundRuleSelect.value);
-  if (!rule) return;
-  rule.filterKey = backgroundFilterSelect.value;
-  saveBackgroundRules();
-  syncBackgroundRuleEditor();
-  showToast("Da luu cau hinh auto filter cho chu.");
-});
-document.querySelector("#resetBackgroundRulesBtn").addEventListener("click", () => {
-  localStorage.removeItem(backgroundRuleStorageKey);
-  adminState.backgroundRules = loadBackgroundRules();
-  renderBackgroundManager();
-  showToast("Da reset rule background mac dinh.");
-});
-
 async function loadLearnedModel() {
   try {
     const response = await fetch("outputs/magimir_lut/magimir_poly_coeffs.json", { cache: "no-store" });
@@ -805,9 +843,42 @@ async function loadLearnedModel() {
     const button = document.querySelector("#adminLearnedFilterBtn");
     button.disabled = false;
     renderBackgroundManager();
-    showToast("Đã load AI learned color model.");
+    showToast("Đã load filter Brown.");
   } catch {
-    showToast("Chưa load được AI learned model.");
+    showToast("Chưa load được filter Brown.");
+  }
+}
+
+async function loadAdminLut({ path, stateKey, buttonId, label }) {
+  try {
+    const response = await fetch(path, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const lines = (await response.text())
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"));
+    const triplets = [];
+    for (const line of lines) {
+      const values = line.split(/\s+/).map(Number);
+      if (values.some(Number.isNaN)) continue;
+      if (triplets.length === 0 && values.length > 3) continue;
+      if (values.length >= 3) triplets.push(values.slice(0, 3));
+    }
+    const size = Math.round(Math.cbrt(triplets.length));
+    if (size ** 3 !== triplets.length) throw new Error("LUT không hợp lệ");
+    const maxValue = triplets.reduce((max, values) => Math.max(max, ...values), 0);
+    const scale = maxValue <= 255 ? 255 : maxValue <= 1023 ? 1023 : maxValue <= 4095 ? 4095 : 65535;
+    const data = new Float32Array(triplets.length * 3);
+    triplets.forEach((values, index) => {
+      data[index * 3] = values[0] / scale;
+      data[index * 3 + 1] = values[1] / scale;
+      data[index * 3 + 2] = values[2] / scale;
+    });
+    adminState[stateKey] = { size, data };
+    document.querySelector(buttonId).disabled = false;
+    renderBackgroundManager();
+  } catch {
+    showToast(`Chưa load được LUT ${label}.`);
   }
 }
 
@@ -817,3 +888,15 @@ renderBackgroundManager();
 renderPhotoGrid();
 renderPreview();
 loadLearnedModel();
+loadAdminLut({
+  path: "assets/luts/pro-neg-std.3dl",
+  stateKey: "proNegStdLut",
+  buttonId: "#adminProNegStdFilterBtn",
+  label: "Pro Neg Std",
+});
+loadAdminLut({
+  path: "assets/luts/classic-chrome.3dl",
+  stateKey: "classicChromeLut",
+  buttonId: "#adminClassicChromeFilterBtn",
+  label: "Classic Chrome",
+});
